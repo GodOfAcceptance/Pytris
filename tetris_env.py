@@ -21,10 +21,11 @@ class TetrisEnv(gym.Env):
     The piece will drop every 45 frames, or 0.75 seconds.
     
     
-    Action space: MultiDiscrete([3,3,3]):
+    Action space: MultiDiscrete([3,3,3,2]):
         - Horizontal direction: NOOP[0], LEFT[1], Right[2]
         - Rotation: NOOP[0], LEFT[1], RIGHT[2]
         - Drop type: NOOP[0], Soft[1], hard[2]
+        - Hold: NOOP[0], HOLD[1]
     
     Observation space: 
     
@@ -110,8 +111,9 @@ class TetrisEnv(gym.Env):
         
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
+        action = self._convertActions(action)
         direction = action[0]
-        rotation = (action[1] % 3 - 1) * (action[1] != 0)
+        rotation = action[1]
         drop = action[2]
         hold = action[3]
         if hold and self.holdAllowed: #hold
@@ -150,10 +152,10 @@ class TetrisEnv(gym.Env):
                     self.arr_t = now
 
             if rotation != 0:
-                if self._doesFit(self.curr_piece_type, (self.rotation + rotation)%4, self.px, self.py):
-                    self.rotation = (self.rotation + rotation) % 4
+                if self._doesFit(self.curr_piece_type, (self.rotation - rotation) % 4, self.px, self.py):
+                    self.rotation = (self.rotation - rotation) % 4
                 else:
-                    self._wallKick(self.curr_piece_type, (self.rotation + rotation)%4)
+                    self._wallKick(self.curr_piece_type, (self.rotation - rotation)%4)
             
             
             if self.gravityOn:
@@ -209,6 +211,16 @@ class TetrisEnv(gym.Env):
     
     
     ##################   HELPER FUNCTIONS   ######################
+    def _convertActions(self, action):
+        """
+        Converts first two actions (direction and rotation) into usable numbers
+        """
+        res = np.zeros(4, dtype=int)
+        res[:2] = (2 * action[:2] - 3) * (action[:2] != 0)
+        res[2:] = action[2:]
+        return res
+    
+    
     def _initializePieceQueue(self):
         self.queue = deque()
         for i in range(5):
