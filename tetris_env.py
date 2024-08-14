@@ -66,7 +66,6 @@ class TetrisEnv(gym.Env):
         self.board[:,0] = 9
         self.board[:,COLUMNS-1] = 9
         self.board[ROWS-1,:] = 9
-        self.lineFlag =[False] * (ROWS-1)  #lineFlag[i] is True if and only if ith row contains no zeros. 0 <= i <= 21 = ROWS-2.
         
         
         ## Piece setup
@@ -238,33 +237,33 @@ class TetrisEnv(gym.Env):
                 yield piece
         
     
-    def _setLineFlag(self):
-        """
-        Sets self.lineFlag to True for each lines that are complete
-        Returns the index of the lowest cleared line. If no line is complete, returns -1.
-        """
-        lowest = -1
-        for i in reversed(range(ROWS-1)): # 0 <= i <= 21, iterate from 21.
-            if np.all(self.board[i] != 0):
-                lowest = max(lowest, i)
-                self.lineFlag[i] = True
-        
-        return lowest
-    
-    
     def _clearLines(self):
         """
-        Clears rows if self.lineFlag[row] is true.
-        Resets lineflag.
-        Returns the number of lines cleared.
+        Clears rows that are completed.
+        Returns a tuple: (clearCount, index of the most bottom row cleared)
         """
-        count = 0
-        for i in range(len(self.lineFlag)):
-            if self.lineFlag[i]:
-                self.board[i] = NEW_LINE.copy()
-                count += 1
-        self.lineFlag = [False] * (ROWS-1)
-        return count
+        
+        flag = np.all(self.board[:ROWS-1] != 0, axis=1)
+        rowsToClear = np.where(flag)[0]
+        clearCount = len(rowsToClear)
+        if np.any(flag):
+            bottom = np.max(rowsToClear)
+        else:
+            bottom = -1
+            
+        self.board[rowsToClear] = NEW_LINE
+    
+        if clearCount > 0:
+            self._pullBoardDown(clearCount, bottom)
+            
+    
+    def _pullBoardDown(self, count, start):
+        """
+        Moves rows down by `count` positions starting from the `start` row.
+        This is equivalent to pulling the board down by `count` rows.
+        """
+        rows_to_move = np.arange(start - count + 1)[::-1]
+        self.board[rows_to_move + count] = self.board[rows_to_move].copy()
     
     
     def _setGhostCoord(self):
@@ -346,27 +345,7 @@ class TetrisEnv(gym.Env):
                 if(piece_array[py,px] != 0):
                     self.board[y+py][x+px] = piece_type + 1
         
-        bottom = self._setLineFlag()
-        clearCount = self._clearLines()
-        if clearCount > 0:
-            self._pullBoardDown(clearCount, bottom)
-            
-    
-    def _pullBoardDown(self, count, start):
-        for r in reversed(range(0, start - count + 1)):
-            self._moveRow(r, r+count)
-            
-    
-
-    def _moveRow(self, src, dest):
-        """
-        Moves src row to dest row.
-        Requires that src and dest are within the bounds of board without walls. 
-        I.e., 0 <= src, dest <= 21
-        """
-        assert 0 <= src <= 21 and 0 <= dest <= 21
-        
-        self.board[dest] = self.board[src].copy()
+        self._clearLines()
 
 
     def _swap(self):
@@ -440,6 +419,7 @@ class TetrisEnv(gym.Env):
                             return False
                         
         return True
+    
     
 
     def _render_frame(self, mode):
