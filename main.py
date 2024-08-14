@@ -2,12 +2,16 @@ import tetris_env
 import pygame
 import time
 from settings import *
+from agent import RandomAgent
 
 class Main:
-    def __init__(self, training=False, agent=None, render_mode=None, sfx=False):
-        assert not (training and sfx), "Don't enable sfx while training!"
+    def __init__(self, player=None, agent=None, render_mode=None, sfx=False):
+        assert player in ["train", "human", "agent"], "unsupported player. Available: train, human, agent"
+        
         self.sfx = sfx
-        self.isTraining = training
+        self.player = player
+        self.isTraining = player=="train"
+        self.agent = agent
         self.env = tetris_env.TetrisEnv(render_mode=render_mode)
         self.gameIsRunning = False
         self.restart = False
@@ -16,15 +20,46 @@ class Main:
         self.keyHeldFrame = [0] * 8
 
     def run(self):
-        self.play()
+        if self.player == "human":
+            self.playHuman()
+        elif self.player == "agent":
+            self.playAgent()
+        elif self.player == "train":
+            self.train()
             
-            
+    
     def train(self):
         pass
     
+    
+    def playAgent(self, nEpisodes=5):
+        assert self.player == "agent"
+        self.gameIsRunning = True
+        
+        for episode in range(nEpisodes):
+            if not self.gameIsRunning:
+                break;
+            
+            done, info = self.env.reset()
+            
+            while not done:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        done = True
+                        self.gameIsRunning = False
+                        break;
+                    
+                action = self.agent.getAction(done, info)
+                done, info = self.env.step(action)
+                
+                if done:
+                    break;
+        
+        self.gameIsRunning = False
+        self.env.close()
          
 
-    def play(self):
+    def playHuman(self):
         self.env.reset()
         self.gameIsRunning = True
         
@@ -42,12 +77,12 @@ class Main:
                 lockSFX.play()
                 
             if done:
-                self.isRunning = False
+                self.gameIsRunning = False
                 break;
             
         if self.restart:
             self.restart = False
-            self.play()
+            self.playHuman()
         self.env.close()
         
 
@@ -135,22 +170,20 @@ class Main:
     
     
     def getAction(self):
-        NOOP = True
         direction = self.getDirection()
         rotation = self.getRotation()
         drop = self.getDrop()
         hold = False
         if self.keyHeld[7] and self.keyHeldFrame[7] == 1:
             hold = True
-        if direction != 0 or rotation != 0 or drop != 0:
-            NOOP = False
-        return [NOOP, direction, rotation, drop, hold]
+        return [direction, rotation, drop, hold]
     
             
         
     
 if __name__ == '__main__':
-    main = Main(training=False, render_mode='human', sfx=True)
+    # main = Main(player="human", agent=RandomAgent, render_mode='human', sfx=True)
+    main = Main(player="agent", agent=RandomAgent, render_mode='human', sfx=True)
     main.run()
     
     

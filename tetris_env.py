@@ -21,9 +21,12 @@ class TetrisEnv(gym.Env):
     The piece will drop every 45 frames, or 0.75 seconds.
     
     
-    Action space: Discrete(7) - NOOP, left, right, rotate left, rotate right, soft drop, hard drop
+    Action space: MultiDiscrete([3,3,3]):
+        - Horizontal direction: NOOP[0], LEFT[1], Right[2]
+        - Rotation: NOOP[0], LEFT[1], RIGHT[2]
+        - Drop type: NOOP[0], Soft[1], hard[2]
     
-    Observation space: entire window or just the board or board and nexts etc.
+    Observation space: 
     
     Info: Score, Time, Finesse, PPS, KPP, Number of holes, Bumpiness
     
@@ -47,7 +50,7 @@ class TetrisEnv(gym.Env):
         self.preview = None
         self.stats = None
         
-        self.action_space = spaces.Discrete(7)
+        self.action_space = spaces.MultiDiscrete([3,3,3,2], dtype=int)
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
             "preview": spaces.Discrete(5), #3 out of 7 tetrominos  
@@ -92,12 +95,14 @@ class TetrisEnv(gym.Env):
 
         if self.render_mode == 'human':
             self.render()
+            
+        return False, self.stats
     
     
         
     def step(self, action):
         """
-        action = [NOOP, Horizontal Direction, Rotation, Drop Type]
+        action = [Horizontal Direction, Rotation, Drop Type, Hold]
         """
         truncated = False
         terminated = self.gameOver
@@ -105,10 +110,10 @@ class TetrisEnv(gym.Env):
         
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
-        direction = action[1]
-        rotation = action[2]
-        drop = action[3]
-        hold = action[4]
+        direction = action[0]
+        rotation = (action[1] % 3 - 1) * (action[1] != 0)
+        drop = action[2]
+        hold = action[3]
         if hold and self.holdAllowed: #hold
             self._swap()
             info["hold"] = True
