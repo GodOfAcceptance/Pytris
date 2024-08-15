@@ -35,7 +35,7 @@ class Main:
         pass
     
     
-    def playAgent(self, nEpisodes=5):
+    def playAgent(self, nEpisodes=10):
         assert self.player == "agent"
         self.gameIsRunning = True
         
@@ -52,9 +52,10 @@ class Main:
                         self.gameIsRunning = False
                         break;
                 action = self.agent.getAction()
-                done, info = self.env.step(action)
+                obs, reward, terminated, truncated, info = self.env.step(action)
                 
-                if done:
+                if terminated or truncated:
+                    done = True
                     break;
         
         self.gameIsRunning = False
@@ -72,16 +73,14 @@ class Main:
             self.events()
             self.updateKeyHeldFrame()
             
-            a = time.time()
             action = self.getAction()
-            done, info = self.env.step(action)
-            b = time.time()
-            print(b-a)
+            obs, reward, terminated, truncated, info = self.env.step(action)
+  
             
             if self.sfx and info["locked"]:
                 lockSFX.play()
                 
-            if done:
+            if terminated or truncated:
                 self.gameIsRunning = False
                 break;
             

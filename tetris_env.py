@@ -60,13 +60,10 @@ class TetrisEnv(gym.Env):
     
     def reset(self):
         self.gameOver = False
+        self.totalScore = 0
         
         ## Board setup
-        self.board = np.zeros((ROWS,COLUMNS), dtype=int)
-        self.board[:,0] = 9
-        self.board[:,COLUMNS-1] = 9
-        self.board[ROWS-1,:] = 9
-        
+        self._resetBoard()
         
         ## Piece setup
         self.bag = self._7bagRandomizer()
@@ -104,12 +101,14 @@ class TetrisEnv(gym.Env):
         """
         action = [Horizontal Direction, Rotation, Drop Type, Hold]
         """
+        reward = 0
         truncated = False
         terminated = self.gameOver
         info = {"locked": False, "hold": False}
         
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
+        
         action = self._convertActions(action)
         direction = action[0]
         rotation = action[1]
@@ -120,9 +119,9 @@ class TetrisEnv(gym.Env):
             info["hold"] = True
             
             
-        if drop == 2:
+        if drop == 2: #Hard drop
             self._hard_drop()
-            self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
+            reward = self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
             info["locked"] = True
             self._spawn()
                         
@@ -177,18 +176,22 @@ class TetrisEnv(gym.Env):
             if self.lock_t < LOCK_DELAY:
                 self.lock_t += 1
             else:
-                self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
+                reward = self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
                 info["locked"] = True
                 self._spawn()
         else:
             self.lock_t = 0.0
 
         self._setGhostCoord()
+        self.totalScore += reward
+        
         
         if self.render_mode == 'human':
             self.render()
+        
+        observation = self._getObs()
             
-        return (terminated or truncated), info
+        return observation, reward, terminated, truncated, info
     
     
     def render(self):
@@ -210,6 +213,16 @@ class TetrisEnv(gym.Env):
     
     
     ##################   HELPER FUNCTIONS   ######################
+    def _resetBoard(self):
+        self.board = np.zeros((ROWS,COLUMNS), dtype=int)
+        self.board[:,0] = 9
+        self.board[:,COLUMNS-1] = 9
+        self.board[ROWS-1,:] = 9
+        
+    def _getObs(self):
+        return {"board": self.board.copy(), "curr": self.curr_piece_type, "rotation": self.rotation, "pos": (self.px, self.py), "hold": self.heldPiece}
+    
+        
     def _convertActions(self, action):
         """
         Converts first two actions (direction and rotation) into usable numbers
@@ -240,7 +253,7 @@ class TetrisEnv(gym.Env):
     def _clearLines(self):
         """
         Clears rows that are completed.
-        Returns a tuple: (clearCount, index of the most bottom row cleared)
+        Returns the reward based on number of lines cleared.
         """
         
         flag = np.all(self.board[:ROWS-1] != 0, axis=1)
@@ -250,20 +263,21 @@ class TetrisEnv(gym.Env):
             bottom = np.max(rowsToClear)
         else:
             bottom = -1
-            
-        self.board[rowsToClear] = NEW_LINE
     
         if clearCount > 0:
             self._pullBoardDown(clearCount, bottom)
+        
+        reward = REWARD_MAP[clearCount]
+        return reward #int(reward * BTB_MULTIPLIER) if backToBack else reward
             
     
     def _pullBoardDown(self, count, start):
-        """
-        Moves rows down by `count` positions starting from the `start` row.
-        This is equivalent to pulling the board down by `count` rows.
-        """
-        rows_to_move = np.arange(start - count + 1)[::-1]
-        self.board[rows_to_move + count] = self.board[rows_to_move].copy()
+        clipped = self.board[:start-count+1].copy()
+        fullClip = clipped
+        for _ in range(count):
+            fullClip = np.vstack([NEW_LINE, fullClip])
+        self.board[start-count+1:start+1] = NEW_LINE
+        self.board[:start+1] = fullClip
     
     
     def _setGhostCoord(self):
@@ -339,13 +353,19 @@ class TetrisEnv(gym.Env):
     
     
     def _lock_piece(self, piece_type, rotation, x, y):
+        """
+        Locks the piece on (x,y).
+        Calls clearLines
+        Returns the reward
+        """
         piece_array = self._rotate(piece_type, rotation)
         for px in range(piece_array.shape[1]):
             for py in range(piece_array.shape[0]):
                 if(piece_array[py,px] != 0):
                     self.board[y+py][x+px] = piece_type + 1
         
-        self._clearLines()
+        reward = self._clearLines()
+        return reward
 
 
     def _swap(self):
@@ -428,8 +448,8 @@ class TetrisEnv(gym.Env):
             pygame.init()
             pygame.display.init()
             self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-            self.renderStatCooldown = 0.0
-            self.timeLabel = 0.0
+            self.renderTimeCooldown = 0.0
+            self.timeLabel = FONT.render(str(format(0.0, ".2f")), 5, GRAY)
         
         if self.clock is None: #TODO: do I need 'and mode == "human"'?
             self.clock = pygame.time.Clock()
@@ -445,6 +465,7 @@ class TetrisEnv(gym.Env):
         #only if the render mode is 'human'.
         
         
+        #TODO: change the style of function names
         self._render_board(self.canvas)
         self._render_preview(self.canvas)
         self._render_hold(self.canvas)
@@ -557,23 +578,36 @@ class TetrisEnv(gym.Env):
         if self.stat_surface is None:
             self.stat_surface = pygame.Surface((STAT_WIDTH, STAT_HEIGHT))
             self.stat_surface.fill(0)
-            label = FONT.render("Time  ", 5, GRAY)
-            self.stat_surface.blit(label, (STAT_WIDTH / 2 - label.get_width(), CELL_SIZE ))
+            timeLabel = FONT.render("Time  ", 5, GRAY)
+            scoreLabel = FONT.render("Score  ", 5, GRAY)
+            self.stat_surface.blit(timeLabel, (STAT_WIDTH / 2 - timeLabel.get_width(), CELL_SIZE ))
+            self.stat_surface.blit(scoreLabel, (STAT_WIDTH / 2 - timeLabel.get_width(), CELL_SIZE * 2 ))
+            
+        if self.renderTimeCooldown < 100:
+            self.renderTimeCooldown += 1000.0 / self.metadata["render_fps"]
+        else:
+            self.timeLabel = FONT.render(str(format(self.timeElapsed, ".2f")), 5, GRAY)
+            self.renderTimeCooldown = 0.0
+        self._render_time(self.timeLabel, self.stat_surface)
         
-        self._render_time(self.stat_surface, label.get_width())
+        
+        if self.totalScore == 0:
+            self.prevTotalScore = 0
+            scoreLabel = FONT.render(str(0), 5, GRAY)
+        if self.prevTotalScore != self.totalScore:
+            scoreLabel = FONT.render(str(self.totalScore), 5, GRAY)
+        self._renderScore(scoreLabel, self.stat_surface)
         
         canvas.blit(self.stat_surface, (PADDING + HOLD_WIDTH, PADDING + BOARD_SURFACE_HEIGHT))
         
     
-    def _render_time(self, dest, padding):
-        if self.renderStatCooldown < 100:
-            self.renderStatCooldown += 1000.0 / self.metadata["render_fps"]
-        else:
-            self.timeLabel = format(self.timeElapsed, ".2f")
-            self.renderStatCooldown = 0.0
-            
-        num = FONT.render(str(self.timeLabel), 5, GRAY)
-        dest.blit(num, (STAT_WIDTH / 2 + padding - num.get_width(), CELL_SIZE))
+    def _render_time(self, timeLabel, dest):            
+        dest.blit(timeLabel, (STAT_WIDTH / 2, CELL_SIZE))
+        
+                        
+    def _renderScore(self, label, dest):
+        dest.blit(label, (STAT_WIDTH / 2, CELL_SIZE * 2))
+
         
     
     def _render_hold(self, canvas):
@@ -595,3 +629,4 @@ class TetrisEnv(gym.Env):
                     tile = pygame.Surface((CELL_SIZE, CELL_SIZE))
                     tile.fill(TETROMINO_COLORS[self.heldPiece + 1])
                     dest.blit(tile, ((x+1)*CELL_SIZE, (y+1)*CELL_SIZE))
+                    

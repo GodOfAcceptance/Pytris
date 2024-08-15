@@ -42,7 +42,7 @@ BORDER_GRAY = (60, 60, 60)
 
 ## GAME MECHANICS
 #Numbers are in terms of frames
-DROP_INTERVAL = 30
+DROP_INTERVAL = 60
 SOFT_DROP_INTERVAL = 1
 LOCK_DELAY = 60
 FORCE_LOCK_DELAY = 300
@@ -152,3 +152,16 @@ WALL_KICK_DATA_I[(2,1)] = [(0,0),(2,0),(-1,0),(2,1),(-1,-2)]
 WALL_KICK_DATA_I[(1,2)] = [(0,0),(-2,0),(1,0),(-2,-1),(1,2)]
 WALL_KICK_DATA_I[(1,0)] = [(0,0),(1,0),(-2,0),(1,-2),(-2,1)]
 WALL_KICK_DATA_I[(0,1)] = [(0,0),(-1,0),(2,0),(-1,2),(2,-1)]
+
+
+
+
+REWARD_MAP = {
+    0: 0,
+    1: 100,
+    2: 300,
+    3: 500,
+    4: 800,
+}
+
+BTB_MULTIPLIER = 1.5
