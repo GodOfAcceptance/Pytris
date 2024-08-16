@@ -27,10 +27,14 @@ class TetrisEnv(gym.Env):
         - Drop type: NOOP[0], Soft[1], hard[2]
         - Hold: NOOP[0], HOLD[1]
     
-    Observation space: spaces.Dict({
-            "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
-            "preview": spaces.Discrete(5), #3 out of 7 tetrominos  
-        })
+    Observation space: spaces.Dict(
+             {"board": self.board.copy(), 
+                "curr": self.curr_piece_type, 
+                "rotation": self.rotation, 
+                "pos": (self.px, self.py), 
+                "hold": self.heldPiece,
+                "preview": self.queue.copy()
+                })
     
     Info: Score, Time, Finesse, PPS, KPP, Number of holes, Bumpiness
     
@@ -55,9 +59,14 @@ class TetrisEnv(gym.Env):
         self.stats = None
         
         self.action_space = spaces.MultiDiscrete([3,3,3,2], dtype=int)
+        
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
-            "preview": spaces.Discrete(5), #3 out of 7 tetrominos  
+            "curr": spaces.Discrete(7), 
+            "rotation": spaces.Discrete(4), #0, 1, 2 ,3
+            "pos": spaces.Box(low=np.array([0, 0]), high=np.array([ROWS - 1, COLUMNS - 1]), dtype=np.int32),
+            "hold": spaces.Discrete(8), #none + 7 tetrominoes
+            "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
         })
     
     
@@ -106,9 +115,14 @@ class TetrisEnv(gym.Env):
         action = [Horizontal Direction, Rotation, Drop Type, Hold]
         """
         reward = 0
-        truncated = self.totalSteps > 1000 and self.totalScore < 100
+        truncated = self.totalSteps > 5000 and self.totalScore < 100
         terminated = self.gameOver
-        info = {"locked": False, "hold": False}
+        info = {"locked": False, "hold": False} #used for vfx in human play mode.
+        
+        if self.gameOver:
+            return self._getObs(), 0, terminated, truncated, None
+        
+        
         
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
