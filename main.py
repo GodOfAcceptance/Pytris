@@ -6,11 +6,10 @@ from agent import RandomAgent
 
 class Main:
     def __init__(self, player=None, agent=None, render_mode=None, sfx=False):
-        assert player in ["train", "human", "agent"], "unsupported player. Available: train, human, agent"
+        assert player in ["human", "agent"], "unsupported player. Available: human, agent"
         
         self.sfx = sfx
         self.player = player
-        self.isTraining = player=="train"
         self.agent = agent
         self.env = tetris_env.TetrisEnv(render_mode=render_mode)
         self.gameIsRunning = False
@@ -27,13 +26,7 @@ class Main:
             self.playHuman()
         elif self.player == "agent":
             self.playAgent()
-        elif self.player == "train":
-            self.train()
-            
-    
-    def train(self):
-        pass
-    
+
     
     def playAgent(self, nEpisodes=10):
         assert self.player == "agent"

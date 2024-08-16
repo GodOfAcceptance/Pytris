@@ -27,7 +27,10 @@ class TetrisEnv(gym.Env):
         - Drop type: NOOP[0], Soft[1], hard[2]
         - Hold: NOOP[0], HOLD[1]
     
-    Observation space: 
+    Observation space: spaces.Dict({
+            "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
+            "preview": spaces.Discrete(5), #3 out of 7 tetrominos  
+        })
     
     Info: Score, Time, Finesse, PPS, KPP, Number of holes, Bumpiness
     
@@ -61,6 +64,7 @@ class TetrisEnv(gym.Env):
     def reset(self):
         self.gameOver = False
         self.totalScore = 0
+        self.totalSteps = 0
         
         ## Board setup
         self._resetBoard()
@@ -102,7 +106,7 @@ class TetrisEnv(gym.Env):
         action = [Horizontal Direction, Rotation, Drop Type, Hold]
         """
         reward = 0
-        truncated = False
+        truncated = self.totalSteps > 1000 and self.totalScore < 100
         terminated = self.gameOver
         info = {"locked": False, "hold": False}
         
@@ -184,11 +188,11 @@ class TetrisEnv(gym.Env):
 
         self._setGhostCoord()
         self.totalScore += reward
-        
-        
+        self.totalSteps += 1
+
         if self.render_mode == 'human':
             self.render()
-        
+
         observation = self._getObs()
             
         return observation, reward, terminated, truncated, info
