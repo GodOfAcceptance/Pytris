@@ -134,16 +134,15 @@ class Main:
                 self.keyHeldFrame[i] += 1
             else:
                 self.keyHeldFrame[i] = 0
-    
-    
+                
     def getDirection(self):
         direction = 0
         if self.keyHeld[1] and self.keyHeld[2]:
-            direction = 2 if self.keyHeldFrame[1] < self.keyHeldFrame[2] else 1
+            direction = -1 if self.keyHeldFrame[1] < self.keyHeldFrame[2] else 1
         elif self.keyHeld[1] and not self.keyHeld[2]:
-            direction = 1
+            direction = -1
         elif self.keyHeld[2] and not self.keyHeld[1]:
-            direction = 2
+            direction = 1
             
         return direction
     
@@ -151,9 +150,9 @@ class Main:
     def getRotation(self):
         rotation = 0 #counter clockwise
         if self.keyHeld[3] and self.keyHeldFrame[3] == 1: #left
-            rotation = 1
+            rotation = -1
         elif self.keyHeld[4] and self.keyHeldFrame[4] == 1: #righ
-            rotation = 2 
+            rotation = 1 
         return rotation
     
     

@@ -113,7 +113,6 @@ class TetrisEnv(gym.Env):
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
         
-        action = self._convertActions(action)
         direction = action[0]
         rotation = action[1]
         drop = action[2]
@@ -223,18 +222,14 @@ class TetrisEnv(gym.Env):
         self.board[:,COLUMNS-1] = 9
         self.board[ROWS-1,:] = 9
         
-    def _getObs(self):
-        return {"board": self.board.copy(), "curr": self.curr_piece_type, "rotation": self.rotation, "pos": (self.px, self.py), "hold": self.heldPiece}
-    
         
-    def _convertActions(self, action):
-        """
-        Converts first two actions (direction and rotation) into usable numbers
-        """
-        res = np.zeros(4, dtype=int)
-        res[:2] = (2 * action[:2] - 3) * (action[:2] != 0)
-        res[2:] = action[2:]
-        return res
+    def _getObs(self):
+        return {"board": self.board.copy(), 
+                "curr": self.curr_piece_type, 
+                "rotation": self.rotation, 
+                "pos": (self.px, self.py), 
+                "hold": self.heldPiece,
+                "nexts": self.queue.copy()}
     
     
     def _initializePieceQueue(self):
