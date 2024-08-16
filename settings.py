@@ -37,9 +37,6 @@ GRAY = (128,128,128)
 BORDER_GRAY = (60, 60, 60)
 
 
-
-
-
 ## GAME MECHANICS
 #Numbers are in terms of frames
 DROP_INTERVAL = 60
@@ -47,8 +44,8 @@ SOFT_DROP_INTERVAL = 1
 LOCK_DELAY = 60
 FORCE_LOCK_DELAY = 300
 
-DAS = 8
-ARR = 1 #if 0, then teleport
+# DAS = 6
+# ARR = 0 #if 0, then teleport
 
 SPAWN_X = (COLUMNS-2) // 2 - 1
 SPAWN_Y = 0

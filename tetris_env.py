@@ -39,7 +39,7 @@ class TetrisEnv(gym.Env):
     Info: Score, Time, Finesse, PPS, KPP, Number of holes, Bumpiness
     
     """
-    def __init__(self, render_mode = None):
+    def __init__(self, render_mode = None, DAS=8, ARR=1):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
         
@@ -58,8 +58,11 @@ class TetrisEnv(gym.Env):
         self.preview = None
         self.stats = None
         
-        self.action_space = spaces.MultiDiscrete([3,3,3,2], dtype=int)
+        self.DAS = DAS
+        self.ARR = ARR #if 0, then teleport
         
+        self.action_space = spaces.MultiDiscrete([3,3,3,2], dtype=int)
+    
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
             "curr": spaces.Discrete(7), 
@@ -161,8 +164,8 @@ class TetrisEnv(gym.Env):
                     self.das_t = now
                     self.arr_t = now
                     self.horizontalMove(direction)
-                elif (now - self.das_t >= DAS) and (now - self.arr_t >= ARR):
-                    instant = ARR == 0
+                elif (now - self.das_t >= self.DAS) and (now - self.arr_t >= self.ARR):
+                    instant = self.ARR == 0
                     self.horizontalMove(direction, instant)
                     self.arr_t = now
 

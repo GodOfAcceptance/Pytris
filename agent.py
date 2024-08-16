@@ -1,34 +1,17 @@
 import tetris_env
-from collections import deque
-import random
-from collections import namedtuple
 
 env = tetris_env.TetrisEnv(render_mode=None)
 class RandomAgent:
-    mapping = {0: 0, 1: -1, 2: 1}
     def __init__(self):
         pass
     
     def getAction(self):
-        return env.action_space.sample()
-    
+        rawAction = env.action_space.sample()
+        trueAction = [0,0,0,0]
+        trueAction[0] = (2 * rawAction[0] - 3) * (rawAction[0] != 0)
+        trueAction[1] = (2 * rawAction[1] - 3) * (rawAction[1] != 0)
+        trueAction[2] = rawAction[2]
+        trueAction[3] = rawAction[3]
+        return trueAction
 
-
-Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
-class ReplayMemory:
-    def __init__(self, capacity):
-        self.mem = deque([], capacity)
-    
-    
-    def push(self, *args):
-        self.mem.append(Transition(*args))
-        
-    
-    def sample(self, batch_size):
-        return random.sample(self.mem, batch_size)
-    
-    
-    def __len__(self):
-        return len(self.mem)
-    
     
