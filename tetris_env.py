@@ -17,8 +17,6 @@ class TetrisEnv(gym.Env):
         - DAS and ARR (Delayed Auto Shift and Auto Repeat Rate)
         - Preview of next pieces
         - Hold piece (will be available in the next version)
-        
-    The piece will drop every 45 frames, or 0.75 seconds.
     
     
     Action space: MultiDiscrete([3,3,3,2]):
@@ -35,8 +33,6 @@ class TetrisEnv(gym.Env):
                 "hold": self.heldPiece,
                 "preview": self.queue.copy()
                 })
-    
-    Info: Score, Time, Finesse, PPS, KPP, Number of holes, Bumpiness
     
     """
     def __init__(self, render_mode = None, DAS=8, ARR=1):
