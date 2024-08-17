@@ -37,9 +37,6 @@ class TetrisEnv(gym.Env):
     """
     def __init__(self, render_mode = None, DAS=8, ARR=1):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
-        self.render_mode = render_mode
-        
-        
         """
         If human-rendering is used, `self.screen` will be a reference
         to the window that we draw to. `self.clock` will be a clock that is used
@@ -47,6 +44,8 @@ class TetrisEnv(gym.Env):
         human-mode. They will remain `None` until human-mode is used for the
         first time.
         """
+        super().__init__()
+        self.render_mode = render_mode
         self.screen = None
         self.clock = None
         
@@ -62,9 +61,9 @@ class TetrisEnv(gym.Env):
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
             "curr": spaces.Discrete(7), 
-            "rotation": spaces.Discrete(4), #0, 1, 2 ,3
-            "pos": spaces.Box(low=np.array([0, 0]), high=np.array([ROWS - 1, COLUMNS - 1]), dtype=int),
-            "hold": spaces.Discrete(8, start=-1), #-1 and 7 tetrominoes
+            "rotation": spaces.Discrete(4), #0, 1, 2, 3
+            "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
+            "hold": spaces.Discrete(8,), #7 tetrominoes + none
             "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
         })
     
@@ -84,7 +83,7 @@ class TetrisEnv(gym.Env):
         self._spawn()
         self._setGhostCoord()
         self.holdAllowed = True
-        self.heldPiece = -1
+        self.heldPiece = 7 #none
         
         
         ## Features setup
@@ -120,17 +119,18 @@ class TetrisEnv(gym.Env):
         info = {"locked": False, "hold": False} #used for vfx in human play mode.
         
         if self.gameOver:
-            return self._getObs(), 0, terminated, truncated, None
+            return self._getObs(), 0, terminated, truncated, info
         
         
         
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
+        trueAction = self.convert_action(action)
+        direction = trueAction[0]
+        rotation = trueAction[1]
+        drop = trueAction[2]
+        hold = trueAction[3]
         
-        direction = action[0]
-        rotation = action[1]
-        drop = action[2]
-        hold = action[3]
         if hold and self.holdAllowed: #hold
             self._swap()
             info["hold"] = True
@@ -174,7 +174,7 @@ class TetrisEnv(gym.Env):
                 if self._doesFit(self.curr_piece_type, (self.rotation - rotation) % 4, self.px, self.py):
                     self.rotation = (self.rotation - rotation) % 4
                 else:
-                    self._wallKick(self.curr_piece_type, (self.rotation - rotation)%4)
+                    self._wallKick(self.curr_piece_type, (self.rotation - rotation) % 4)
             
             
             if self.gravityOn:
@@ -234,6 +234,17 @@ class TetrisEnv(gym.Env):
     
     
     ##################   HELPER FUNCTIONS   ######################
+    def convert_action(self, rawAction):
+        """
+        Converts the raw action [0,1,2] into [-1,0,1]
+        """
+        trueAction = [0,0,0,0]
+        trueAction[0] = 0 if rawAction[0] == 0 else 1 if rawAction[0] == 1 else -1
+        trueAction[1] = 0 if rawAction[1] == 0 else 1 if rawAction[1] == 1 else -1
+        trueAction[2] = rawAction[2]
+        trueAction[3] = rawAction[3]
+        return trueAction
+         
     def _resetBoard(self):
         self.board = np.zeros((ROWS,COLUMNS), dtype=int)
         self.board[:,0] = 9
@@ -242,12 +253,14 @@ class TetrisEnv(gym.Env):
         
         
     def _getObs(self):
-        return {"board": self.board.copy(), 
+        obs =  {"board": self.board.copy(), 
                 "curr": self.curr_piece_type, 
                 "rotation": self.rotation, 
                 "pos": np.array([self.px, self.py]), 
                 "hold": self.heldPiece,
-                "preview": np.array(self.queue)}
+                "preview": np.array(self.queue)
+                }
+        return obs
 
     
     def _initializePieceQueue(self):
@@ -285,6 +298,7 @@ class TetrisEnv(gym.Env):
             self._pullBoardDown(clearCount, bottom)
         
         reward = REWARD_MAP[clearCount]
+        assert self.board.shape == (ROWS, COLUMNS)
         return reward #int(reward * BTB_MULTIPLIER) if backToBack else reward
             
     
@@ -390,7 +404,7 @@ class TetrisEnv(gym.Env):
         Swaps the current piece with the held piece.
         Basically the same as spawn but does not modify the bag.
         """
-        if self.heldPiece == -1:
+        if self.heldPiece == 7:
             self.heldPiece = self.curr_piece_type
             self.curr_piece_type = self.queue.popleft()
             self.queue.append(next(self.bag))
@@ -417,6 +431,7 @@ class TetrisEnv(gym.Env):
         """
         Requires self.queue to be initialized using _initializePieceQueue()
         """
+        assert self.queue is not None
         self.curr_piece_type = self.queue.popleft()
         self.rotation = 0
         self.px = SPAWN_X
@@ -633,7 +648,7 @@ class TetrisEnv(gym.Env):
             self.hold_surface = pygame.Surface((HOLD_WIDTH, HOLD_HEIGHT))
             self.hold_surface.fill(0)
         
-        if self.heldPiece != -1:
+        if self.heldPiece != 7:
             self._render_hold_piece(self.hold_surface)
         
         canvas.blit(self.hold_surface, ((PADDING, PADDING)))
