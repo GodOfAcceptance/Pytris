@@ -63,13 +63,14 @@ class TetrisEnv(gym.Env):
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
             "curr": spaces.Discrete(7), 
             "rotation": spaces.Discrete(4), #0, 1, 2 ,3
-            "pos": spaces.Box(low=np.array([0, 0]), high=np.array([ROWS - 1, COLUMNS - 1]), dtype=np.int32),
-            "hold": spaces.Discrete(8), #none + 7 tetrominoes
+            "pos": spaces.Box(low=np.array([0, 0]), high=np.array([ROWS - 1, COLUMNS - 1]), dtype=int),
+            "hold": spaces.Discrete(8, start=-1), #-1 and 7 tetrominoes
             "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
         })
     
     
-    def reset(self):
+    def reset(self, seed=None):
+        super().reset(seed=seed)
         self.gameOver = False
         self.totalScore = 0
         self.totalSteps = 0
@@ -104,8 +105,8 @@ class TetrisEnv(gym.Env):
 
         if self.render_mode == 'human':
             self.render()
-            
-        return False, self.stats
+        
+        return self._getObs(), {}
     
     
         
@@ -133,6 +134,8 @@ class TetrisEnv(gym.Env):
         if hold and self.holdAllowed: #hold
             self._swap()
             info["hold"] = True
+            observation = self._getObs()
+            return observation, reward, terminated, truncated, info
             
             
         if drop == 2: #Hard drop
@@ -140,7 +143,9 @@ class TetrisEnv(gym.Env):
             reward = self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
             info["locked"] = True
             self._spawn()
-                        
+            observation = self._getObs()
+            return observation, reward, terminated, truncated, info
+             
         else:
             if drop == 1:
                 self.gravityOn = False
@@ -240,14 +245,14 @@ class TetrisEnv(gym.Env):
         return {"board": self.board.copy(), 
                 "curr": self.curr_piece_type, 
                 "rotation": self.rotation, 
-                "pos": (self.px, self.py), 
+                "pos": np.array([self.px, self.py]), 
                 "hold": self.heldPiece,
-                "nexts": self.queue.copy()}
-    
+                "preview": np.array(self.queue)}
+
     
     def _initializePieceQueue(self):
         self.queue = deque()
-        for i in range(5):
+        for i in range(NUM_PREVIEW):
             self.queue.append(next(self.bag))
     
     
@@ -388,6 +393,7 @@ class TetrisEnv(gym.Env):
         if self.heldPiece == -1:
             self.heldPiece = self.curr_piece_type
             self.curr_piece_type = self.queue.popleft()
+            self.queue.append(next(self.bag))
         else:
             temp = self.curr_piece_type
             self.curr_piece_type = self.heldPiece
