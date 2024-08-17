@@ -6,5 +6,8 @@ tetris_env.py -- a tetris game state that implements gymnasium.Env. Could be imp
 main.py -- main application from which you can play the game.
 agent.py -- contains a random action agent.
 
-How to play: make sure the instance of tetris environment under if __name__ = "__main__" have player="human" in order to play by yourself.
-Then, call python main.py on terminal.
+How to play: 
+Type "python main.py" into command line. Specify required arguments: player and render mode. 
+Currently, you can only play as yourself or a random action agent.
+
+
