@@ -19,11 +19,8 @@ class TetrisEnv(gym.Env):
         - Hold piece (will be available in the next version)
     
     
-    Action space: MultiDiscrete([3,3,3,2]):
-        - Horizontal direction: NOOP[0], LEFT[1], Right[2]
-        - Rotation: NOOP[0], LEFT[1], RIGHT[2]
-        - Drop type: NOOP[0], Soft[1], hard[2]
-        - Hold: NOOP[0], HOLD[1]
+    Action space: Box(0, 2, shape=(7,) dtype=int)
+    [left, right, rotate left, rotate right, soft drop, hard drop, hold]
     
     Observation space: spaces.Dict(
              {"board": self.board.copy(), 
@@ -57,15 +54,15 @@ class TetrisEnv(gym.Env):
         self.ARR = ARR #if 0, then teleport
         
         
-        self.action_space = spaces.MultiDiscrete([3,3,3,2], dtype=int)
+        self.action_space = spaces.Box(0,1, shape=(7,), dtype=bool)
     
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
-            # "curr": spaces.Discrete(7), 
-            # "rotation": spaces.Discrete(4), #0, 1, 2, 3
-            # "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
-            # "hold": spaces.Discrete(8,), #7 tetrominoes + none
-            # "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
+            "curr": spaces.Discrete(7), 
+            "rotation": spaces.Discrete(4), #0, 1, 2, 3
+            "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
+            "hold": spaces.Discrete(8,), #7 tetrominoes + none
+            "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
         })
     
     
@@ -223,8 +220,7 @@ class TetrisEnv(gym.Env):
         fitness = (-0.51 * height) + (0.76 * lines) + (-0.36 * nholes) + (-0.18 * bumpiness)
         reward = self.previousFitness - fitness
         self.previousFitness = fitness
-        
-        print(reward)
+
         if self.render_mode == 'human':
             self.render()
 
@@ -343,11 +339,11 @@ class TetrisEnv(gym.Env):
         
     def _getObs(self):
         obs =  {"board": self.board.copy(), 
-                # "curr": self.curr_piece_type, 
-                # "rotation": self.rotation, 
-                # "pos": np.array([self.px, self.py]), 
-                # "hold": self.heldPiece,
-                # "preview": np.array(self.queue)
+                "curr": self.curr_piece_type, 
+                "rotation": self.rotation, 
+                "pos": np.array([self.px, self.py]), 
+                "hold": self.heldPiece,
+                "preview": np.array(self.queue)
                 }
         return obs
 

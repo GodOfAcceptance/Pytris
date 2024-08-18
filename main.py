@@ -17,10 +17,8 @@ class Main:
         self.gameIsRunning = False
         self.restart = False
         
-        # self.keyHeld = [False] * 8 #Noop, left, right, rotleft, rotright, softdrop, harddrop, hold
-        # self.keyHeldFrame = [0] * 8
-        self.keyHeld = np.zeros((8,), dtype=bool)
-        self.keyHeldFrame = np.zeros((8,), dtype=int)
+        self.keyHeld = np.zeros((7,), dtype=bool)
+        self.keyHeldFrame = np.zeros((7,), dtype=int)
         
         
     def run(self):
@@ -101,49 +99,44 @@ class Main:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
                     if self.sfx: tapSFX.play()
-                    self.keyHeld[1] = True
+                    self.keyHeld[0] = True
                 if event.key == pygame.K_RIGHT:
                     if self.sfx: tapSFX.play()
-                    self.keyHeld[2] = True
+                    self.keyHeld[1] = True
                 if event.key == pygame.K_z:
-                    self.keyHeld[3] = True
+                    self.keyHeld[2] = True
                 if event.key == pygame.K_x:
-                    self.keyHeld[4] = True
+                    self.keyHeld[3] = True
                 if event.key == pygame.K_DOWN:
-                    self.keyHeld[5] = True
+                    self.keyHeld[4] = True
                 if event.key == pygame.K_SPACE:
-                    self.keyHeld[6] = True
+                    self.keyHeld[5] = True
                 if event.key == pygame.K_r:
                     self.restart = True
                 if event.key == pygame.K_c:
-                    self.keyHeld[7] = True
+                    self.keyHeld[6] = True
                     
             
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_LEFT:
-                    self.keyHeld[1] = False
+                    self.keyHeld[0] = False
                 if event.key == pygame.K_RIGHT:
-                    self.keyHeld[2] = False
+                    self.keyHeld[1] = False
                 if event.key == pygame.K_z:
-                    self.keyHeld[3] = False
+                    self.keyHeld[2] = False
                 if event.key == pygame.K_x:
-                    self.keyHeld[4] = False
+                    self.keyHeld[3] = False
                 if event.key == pygame.K_DOWN:
-                    self.keyHeld[5] = False
+                    self.keyHeld[4] = False
                 if event.key == pygame.K_SPACE:
-                    self.keyHeld[6] = False
+                    self.keyHeld[5] = False
                 if event.key == pygame.K_c:
-                    self.keyHeld[7] = False
+                    self.keyHeld[6] = False
                     
     
     def updateKeyHeldFramesForAgent(self, action):
-        self.keyHeld[1] = action[0] == 1
-        self.keyHeld[2] = action[0] == 2
-        self.keyHeld[3] = action[1] == 1
-        self.keyHeld[4] = action[1] == 2
-        self.keyHeld[5] = action[2] == 1
-        self.keyHeld[6] = action[2] == 2
-        self.keyHeld[7] = action[3]
+        for i in range(len(self.keyHeld)):
+            self.keyHeld[i] = action[i]
         self.updateKeyHeldFrame()
                     
                     
@@ -158,11 +151,11 @@ class Main:
                 
     def getDirection(self):
         direction = 0
-        if self.keyHeld[1] and self.keyHeld[2]:
-            direction = 1 if self.keyHeldFrame[1] < self.keyHeldFrame[2] else 2
-        elif self.keyHeld[1] and not self.keyHeld[2]:
+        if self.keyHeld[0] and self.keyHeld[1]:
+            direction = 1 if self.keyHeldFrame[0] < self.keyHeldFrame[1] else 2
+        elif self.keyHeld[0] and not self.keyHeld[1]:
             direction = 1
-        elif self.keyHeld[2] and not self.keyHeld[1]:
+        elif self.keyHeld[1] and not self.keyHeld[0]:
             direction = 2
             
         return direction
@@ -170,18 +163,18 @@ class Main:
     
     def getRotation(self):
         rotation = 0 #counter clockwise
-        if self.keyHeld[3] and self.keyHeldFrame[3] == 1: #left
+        if self.keyHeld[2] and self.keyHeldFrame[2] == 1: #left
             rotation = 1
-        elif self.keyHeld[4] and self.keyHeldFrame[4] == 1: #right
+        elif self.keyHeld[3] and self.keyHeldFrame[3] == 1: #right
             rotation = 2 
         return rotation
     
     
     def getDrop(self):
         drop = 0
-        if self.keyHeld[5]:
+        if self.keyHeld[4]:
             drop = 1
-        if self.keyHeld[6] and self.keyHeldFrame[6] == 1:
+        if self.keyHeld[5] and self.keyHeldFrame[5] == 1:
             drop = 2
         return drop
     
@@ -191,7 +184,7 @@ class Main:
         res[0] = self.getDirection()
         res[1] = self.getRotation()
         res[2] = self.getDrop()
-        if self.keyHeld[7] and self.keyHeldFrame[7] == 1:
+        if self.keyHeld[6] and self.keyHeldFrame[6] == 1:
             res[3] = True
         return res
     
@@ -270,6 +263,9 @@ if __name__ == '__main__':
                 case "a2c":
                     from stable_baselines3 import A2C
                     agent = A2C.load("a2ctetris")
+                case "LR":
+                    from agent import MoveLeftAndRightAgent
+                    agent = MoveLeftAndRightAgent()
                 case _:
                     print("unsupported agent")
                     exit()
