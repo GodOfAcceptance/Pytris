@@ -208,20 +208,12 @@ class TetrisEnv(gym.Env):
                     self._spawn()
                 else:
                     self.lock_t += 1
-                
-            
-        print(self.startLocking, self.lock_t, self.force_lock_t)
 
         self._setGhostCoord()
         
         self.totalScore += REWARD_MAP[clearCount] #this is for human display only.
         ## start reward calculation
-        num_holes = self._nHoles(self.board)
-        num_pits = self._nPits(self.board)
-        scale_factor = 1 / (0.76 + 0.357 + 0.2)
-        reward = scale_factor * ((clearCount / 4) * 0.76 + 
-                  (num_holes / 100) * -0.5 +
-                  ((num_pits - 1) / (10)) * -0.2 + 1)
+        reward = 0 #TODO
         
         if self.render_mode == 'human':
             self.render()
@@ -307,9 +299,9 @@ class TetrisEnv(gym.Env):
         """
         Converts the raw action [0,1,2] into [-1,0,1]
         """
-        trueAction = [0,0,0,0]
-        trueAction[0] = 0 if rawAction[0] == 0 else 1 if rawAction[0] == 1 else -1
-        trueAction[1] = 0 if rawAction[1] == 0 else 1 if rawAction[1] == 1 else -1
+        trueAction = [0,0,0]
+        trueAction[0] = 0 if rawAction[0] == 0 else 1 if rawAction[0] == -1 else 1
+        trueAction[1] = 0 if rawAction[1] == 0 else 1 if rawAction[1] == -1 else 1
         trueAction[2] = rawAction[2]
         trueAction[3] = rawAction[3]
         return trueAction
@@ -551,7 +543,7 @@ class TetrisEnv(gym.Env):
             self.renderTimeCooldown = 0.0
             self.timeLabel = FONT.render(str(format(0.0, ".2f")), 5, GRAY)
         
-        if self.clock is None: #TODO: do I need 'and mode == "human"'?
+        if self.clock is None:
             self.clock = pygame.time.Clock()
         
         assert self.screen is not None
@@ -565,7 +557,6 @@ class TetrisEnv(gym.Env):
         #only if the render mode is 'human'.
         
         
-        #TODO: change the style of function names
         self._render_board(self.canvas)
         self._render_preview(self.canvas)
         self._render_hold(self.canvas)
