@@ -49,9 +49,11 @@ class Main:
                         done = True
                         self.gameIsRunning = False
                         break;
-                    
-                action = self.agent.predict(obs)[0]
-                obs, reward, terminated, truncated, info = self.env.step(action)
+                
+                agentAction = self.agent.predict(obs)[0]
+                self.updateKeyHeldFramesForAgent(agentAction)
+                inputAction = self.getAction()
+                obs, reward, terminated, truncated, info = self.env.step(inputAction)
                 
                 if terminated or truncated:
                     done = True
@@ -70,9 +72,9 @@ class Main:
             if self.restart:
                 self.gameIsRunning = False
                 break;
+            
             self.events()
             self.updateKeyHeldFrame()
-            
             action = self.getAction()
             obs, reward, terminated, truncated, info = self.env.step(action)
   
@@ -132,6 +134,17 @@ class Main:
                     self.keyHeld[6] = False
                 if event.key == pygame.K_c:
                     self.keyHeld[7] = False
+                    
+    
+    def updateKeyHeldFramesForAgent(self, action):
+        self.keyHeld[1] = action[0] == 1
+        self.keyHeld[2] = action[0] == 2
+        self.keyHeld[3] = action[1] == 1
+        self.keyHeld[4] = action[1] == 2
+        self.keyHeld[5] = action[2] == 1
+        self.keyHeld[6] = action[2] == 2
+        self.keyHeld[7] = action[3]
+        self.updateKeyHeldFrame()
                     
                     
     
