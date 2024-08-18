@@ -299,7 +299,7 @@ class TetrisEnv(gym.Env):
         """
         Converts the raw action [0,1,2] into [-1,0,1]
         """
-        trueAction = [0,0,0]
+        trueAction = [0,0,0,0]
         trueAction[0] = 0 if rawAction[0] == 0 else -1 if rawAction[0] == 1 else 1
         trueAction[1] = 0 if rawAction[1] == 0 else -1 if rawAction[1] == 1 else 1
         trueAction[2] = rawAction[2]

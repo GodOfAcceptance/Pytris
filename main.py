@@ -142,14 +142,15 @@ class Main:
             else:
                 self.keyHeldFrame[i] = 0
                 
+                
     def getDirection(self):
         direction = 0
         if self.keyHeld[1] and self.keyHeld[2]:
-            direction = -1 if self.keyHeldFrame[1] < self.keyHeldFrame[2] else 1
+            direction = 1 if self.keyHeldFrame[1] < self.keyHeldFrame[2] else 2
         elif self.keyHeld[1] and not self.keyHeld[2]:
-            direction = -1
-        elif self.keyHeld[2] and not self.keyHeld[1]:
             direction = 1
+        elif self.keyHeld[2] and not self.keyHeld[1]:
+            direction = 2
             
         return direction
     
@@ -157,9 +158,9 @@ class Main:
     def getRotation(self):
         rotation = 0 #counter clockwise
         if self.keyHeld[3] and self.keyHeldFrame[3] == 1: #left
-            rotation = -1
-        elif self.keyHeld[4] and self.keyHeldFrame[4] == 1: #righ
-            rotation = 1 
+            rotation = 1
+        elif self.keyHeld[4] and self.keyHeldFrame[4] == 1: #right
+            rotation = 2 
         return rotation
     
     
@@ -203,12 +204,19 @@ if __name__ == '__main__':
         from stable_baselines3 import A2C
         from stable_baselines3.common.env_util import make_vec_env
         from stable_baselines3.common.vec_env import SubprocVecEnv
+        from gymnasium.wrappers import TimeLimit
+        from stable_baselines3.common.env_checker import check_env
 
         # Parallel environments
-        vec_env = make_vec_env(tetris_env.TetrisEnv, n_envs=4, vec_env_cls=SubprocVecEnv)
+        check_env(tetris_env.TetrisEnv())
+        vec_env = make_vec_env(tetris_env.TetrisEnv, 
+                               wrapper_class=TimeLimit,
+                               wrapper_kwargs={"max_episode_steps": 18000}, #5 minutes
+                               n_envs=8, 
+                               vec_env_cls=SubprocVecEnv)
 
         model = A2C("MultiInputPolicy", vec_env, verbose=1, device="cpu")
-        model.learn(total_timesteps=25000)
+        model.learn(total_timesteps=10000)
         model.save("a2ctetris")
             
     else:
