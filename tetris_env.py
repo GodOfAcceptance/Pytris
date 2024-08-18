@@ -99,7 +99,11 @@ class TetrisEnv(gym.Env):
         self.drop_t = DROP_INTERVAL
         self.soft_t = SOFT_DROP_INTERVAL
         self.force_lock_t = 0
-
+        
+        
+        ## reward related stuff
+        self.numRotations = 0
+        self.previousFitness = 0
 
 
         ## INFO
@@ -124,9 +128,7 @@ class TetrisEnv(gym.Env):
         
         if self.gameOver:
             return self._getObs(), 0, terminated, truncated, info
-        
-        
-        
+
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
         trueAction = self.convert_action(action)
@@ -175,6 +177,7 @@ class TetrisEnv(gym.Env):
                     self.arr_t = now
 
             if rotation != 0:
+                self.numRotations += 1
                 self.lock_t = 0.0
                 if self._doesFit(self.curr_piece_type, (self.rotation - rotation) % 4, self.px, self.py):
                     self.rotation = (self.rotation - rotation) % 4
@@ -213,8 +216,15 @@ class TetrisEnv(gym.Env):
         
         self.totalScore += REWARD_MAP[clearCount] #this is for human display only.
         ## start reward calculation
-        reward = 0 #TODO
+        height = self._aggregateHeight(self.board)
+        lines = clearCount
+        nholes = self._nHoles(self.board)
+        bumpiness = self._bumpiness(self.board)
+        fitness = (-0.51 * height) + (0.76 * lines) + (-0.36 * nholes) + (-0.18 * bumpiness)
+        reward = self.previousFitness - fitness
+        self.previousFitness = fitness
         
+        print(reward)
         if self.render_mode == 'human':
             self.render()
 
@@ -245,6 +255,23 @@ class TetrisEnv(gym.Env):
     
     
     ##################   HELPER FUNCTIONS   ######################
+    
+    def _bumpiness(self, board):
+        total = 0
+        for col in range(1, COLUMNS-2):
+            total += abs(self._columnHeight(board, col) - self._columnHeight(board, col+1))
+            
+        return total
+    
+    def _aggregateHeight(self, board):
+        total = 0
+        for col in range(1, COLUMNS-1):
+            height = self._columnHeight(board, col)
+            total += height
+            
+        return total
+    
+        
     def _nHoles(self, board):
         """
         Returns the number of holes in the board.
@@ -499,6 +526,7 @@ class TetrisEnv(gym.Env):
         self.soft_t = SOFT_DROP_INTERVAL
         self.lock_t = 0
         self.force_lock_t = 0
+        self.numRotations = 0
         self.queue.append(next(self.bag))
         
         self.holdAllowed = True
