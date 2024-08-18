@@ -98,6 +98,11 @@ class TetrisEnv(gym.Env):
         self.drop_t = DROP_INTERVAL
         self.soft_t = SOFT_DROP_INTERVAL
         
+        
+        ## Reward related variables
+        self.finesse = 0 #Higher = worse
+        self.KPP = 0 #keys per piece. Higher = worse
+
 
         ## INFO
         self.timeElapsed = 0.0
@@ -114,6 +119,7 @@ class TetrisEnv(gym.Env):
         action = [Horizontal Direction, Rotation, Drop Type, Hold]
         """
         reward = 0
+        clearCount = 0
         truncated = self.totalSteps > 5000 and self.totalScore < 100
         terminated = self.gameOver
         info = {"locked": False, "hold": False} #used for vfx in human play mode.
@@ -140,11 +146,10 @@ class TetrisEnv(gym.Env):
             
         if drop == 2: #Hard drop
             self._hard_drop()
-            reward = self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
+            self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
+            clearCount = self._clearLines()
             info["locked"] = True
             self._spawn()
-            observation = self._getObs()
-            return observation, reward, terminated, truncated, info
              
         else:
             if drop == 1:
@@ -193,19 +198,21 @@ class TetrisEnv(gym.Env):
                 else:
                     self.soft_t += 1
 
-        if self.startLocking:
-            if self.lock_t < LOCK_DELAY:
-                self.lock_t += 1
+            if self.startLocking:
+                if self.lock_t < LOCK_DELAY:
+                    self.lock_t += 1
+                else:
+                    self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
+                    clearCount = self._clearLines()
+                    info["locked"] = True
+                    self._spawn()
             else:
-                reward = self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
-                info["locked"] = True
-                self._spawn()
-        else:
-            self.lock_t = 0.0
+                self.lock_t = 0.0
 
         self._setGhostCoord()
-        self.totalScore += reward
-        self.totalSteps += 1
+        
+        ## start reward calculation
+        
 
         if self.render_mode == 'human':
             self.render()
@@ -234,6 +241,7 @@ class TetrisEnv(gym.Env):
     
     
     ##################   HELPER FUNCTIONS   ######################
+        
     def convert_action(self, rawAction):
         """
         Converts the raw action [0,1,2] into [-1,0,1]
@@ -283,7 +291,7 @@ class TetrisEnv(gym.Env):
     def _clearLines(self):
         """
         Clears rows that are completed.
-        Returns the reward based on number of lines cleared.
+        Returns the number of lines cleared.
         """
         
         flag = np.all(self.board[:ROWS-1] != 0, axis=1)
@@ -297,9 +305,9 @@ class TetrisEnv(gym.Env):
         if clearCount > 0:
             self._pullBoardDown(clearCount, bottom)
         
-        reward = REWARD_MAP[clearCount]
+        
         assert self.board.shape == (ROWS, COLUMNS)
-        return reward #int(reward * BTB_MULTIPLIER) if backToBack else reward
+        return clearCount
             
     
     def _pullBoardDown(self, count, start):
@@ -386,8 +394,6 @@ class TetrisEnv(gym.Env):
     def _lock_piece(self, piece_type, rotation, x, y):
         """
         Locks the piece on (x,y).
-        Calls clearLines
-        Returns the reward
         """
         piece_array = self._rotate(piece_type, rotation)
         for px in range(piece_array.shape[1]):
@@ -395,9 +401,8 @@ class TetrisEnv(gym.Env):
                 if(piece_array[py,px] != 0):
                     self.board[y+py][x+px] = piece_type + 1
         
-        reward = self._clearLines()
-        return reward
 
+    
 
     def _swap(self):
         """
@@ -443,6 +448,9 @@ class TetrisEnv(gym.Env):
         self.queue.append(next(self.bag))
         
         self.holdAllowed = True
+        
+        self.finesse = 0
+        self.KPP = 0
                 
         if not self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py):
             self.gameOver = True
@@ -512,8 +520,9 @@ class TetrisEnv(gym.Env):
             pygame.display.flip()
         
         elif mode == "rgb_array":
-            return self._create_image_array(self.canvas, (WINDOW_WIDTH - PADDING, WINDOW_HEIGHT - PADDING))
-            #TODO: is this right?
+            return np.transpose(
+                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
+            )
             
         elif mode == "ram":
             return self._create_board_array()
