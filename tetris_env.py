@@ -21,6 +21,8 @@ class TetrisEnv(gym.Env):
     
     Action space: Box(0, 2, shape=(7,) dtype=int)
     [left, right, rotate left, rotate right, soft drop, hard drop, hold]
+    Action space: Box(0, 2, shape=(7,) dtype=int)
+    [left, right, rotate left, rotate right, soft drop, hard drop, hold]
     
     Observation space: spaces.Dict(
              {"board": self.board.copy(), 
@@ -54,11 +56,15 @@ class TetrisEnv(gym.Env):
         self.DAS = DAS
         self.ARR = ARR #if 0, then teleport
         
-        
         self.action_space = spaces.Box(0,1, shape=(7,), dtype=int)
     
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
+            "curr": spaces.Discrete(7), 
+            "rotation": spaces.Discrete(4), #0, 1, 2, 3
+            "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
+            "hold": spaces.Discrete(8,), #7 tetrominoes + none
+            "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
             "curr": spaces.Discrete(7), 
             "rotation": spaces.Discrete(4), #0, 1, 2, 3
             "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
@@ -327,6 +333,11 @@ class TetrisEnv(gym.Env):
         
     def _getObs(self):
         obs =  {"board": self.board.copy(), 
+                "curr": self.curr_piece_type, 
+                "rotation": self.rotation, 
+                "pos": np.array([self.px, self.py]), 
+                "hold": self.heldPiece,
+                "preview": np.array(self.queue)
                 "curr": self.curr_piece_type, 
                 "rotation": self.rotation, 
                 "pos": np.array([self.px, self.py]), 

@@ -20,7 +20,6 @@ class Main:
         self.keyHeld = np.zeros((7,), dtype=bool)
         
         
-        
     def run(self):
         if self.player == "human":
             self.playHuman()
