@@ -3,7 +3,7 @@ from settings import *
 import gymnasium as gym
 from gymnasium import spaces
 from collections import deque
-
+from controller import Controller
 
 
 class TetrisEnv(gym.Env):
@@ -19,11 +19,8 @@ class TetrisEnv(gym.Env):
         - Hold piece (will be available in the next version)
     
     
-    Action space: MultiDiscrete([3,3,3,2]):
-        - Horizontal direction: NOOP[0], LEFT[1], Right[2]
-        - Rotation: NOOP[0], LEFT[1], RIGHT[2]
-        - Drop type: NOOP[0], Soft[1], hard[2]
-        - Hold: NOOP[0], HOLD[1]
+    Action space: Box(0, 2, shape=(7,) dtype=int)
+    [left, right, rotate left, rotate right, soft drop, hard drop, hold]
     
     Observation space: spaces.Dict(
              {"board": self.board.copy(), 
@@ -45,6 +42,7 @@ class TetrisEnv(gym.Env):
         first time.
         """
         super().__init__()
+        self.ctrl = Controller()
         self.render_mode = render_mode
         self.screen = None
         self.clock = None
@@ -57,15 +55,15 @@ class TetrisEnv(gym.Env):
         self.ARR = ARR #if 0, then teleport
         
         
-        self.action_space = spaces.MultiDiscrete([3,3,3,2], dtype=int)
+        self.action_space = spaces.Box(0,1, shape=(7,), dtype=int)
     
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
-            # "curr": spaces.Discrete(7), 
-            # "rotation": spaces.Discrete(4), #0, 1, 2, 3
-            # "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
-            # "hold": spaces.Discrete(8,), #7 tetrominoes + none
-            # "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
+            "curr": spaces.Discrete(7), 
+            "rotation": spaces.Discrete(4), #0, 1, 2, 3
+            "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
+            "hold": spaces.Discrete(8,), #7 tetrominoes + none
+            "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
         })
     
     
@@ -116,9 +114,9 @@ class TetrisEnv(gym.Env):
     
     
         
-    def step(self, action):
+    def step(self, input):
         """
-        action = [Horizontal Direction, Rotation, Drop Type, Hold]
+        action = [left, right, rot left, rot right, soft drop, hard drop, hold]
         """
         reward = 0
         clearCount = 0
@@ -131,11 +129,15 @@ class TetrisEnv(gym.Env):
 
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
-        trueAction = self.convert_action(action)
-        direction = trueAction[0]
-        rotation = trueAction[1]
-        drop = trueAction[2]
-        hold = trueAction[3]
+        
+        self.ctrl.keyHeld = input
+        self.ctrl.updateKeyHeldFrame()
+        action = self.ctrl.getAction()
+       
+        direction = action[0]
+        rotation = action[1]
+        drop = action[2]
+        hold = action[3]
         
         if hold and self.holdAllowed: #hold
             self._swap()
@@ -159,7 +161,7 @@ class TetrisEnv(gym.Env):
                 self.gravityOn = True
                 self.softDropOn = False
             else:
-                print("unreachable")
+                #print("unreachable")
                 truncated = True
                 
             if self.previous_dir != direction or direction == 0:
@@ -223,8 +225,7 @@ class TetrisEnv(gym.Env):
         fitness = (-0.51 * height) + (0.76 * lines) + (-0.36 * nholes) + (-0.18 * bumpiness)
         reward = self.previousFitness - fitness
         self.previousFitness = fitness
-        
-        print(reward)
+
         if self.render_mode == 'human':
             self.render()
 
@@ -248,11 +249,6 @@ class TetrisEnv(gym.Env):
             pygame.display.quit()
             pygame.quit()
 
-    
-    
-    
-    
-    
     
     ##################   HELPER FUNCTIONS   ######################
     
@@ -320,18 +316,6 @@ class TetrisEnv(gym.Env):
                 return ROWS-1 - row #don't include the bottom wall.
         return 0
                     
-        
-        
-    def convert_action(self, rawAction):
-        """
-        Converts the raw action [0,1,2] into [-1,0,1]
-        """
-        trueAction = [0,0,0,0]
-        trueAction[0] = 0 if rawAction[0] == 0 else -1 if rawAction[0] == 1 else 1
-        trueAction[1] = 0 if rawAction[1] == 0 else -1 if rawAction[1] == 1 else 1
-        trueAction[2] = rawAction[2]
-        trueAction[3] = rawAction[3]
-        return trueAction
     
          
     def _resetBoard(self):
@@ -343,11 +327,11 @@ class TetrisEnv(gym.Env):
         
     def _getObs(self):
         obs =  {"board": self.board.copy(), 
-                # "curr": self.curr_piece_type, 
-                # "rotation": self.rotation, 
-                # "pos": np.array([self.px, self.py]), 
-                # "hold": self.heldPiece,
-                # "preview": np.array(self.queue)
+                "curr": self.curr_piece_type, 
+                "rotation": self.rotation, 
+                "pos": np.array([self.px, self.py]), 
+                "hold": self.heldPiece,
+                "preview": np.array(self.queue)
                 }
         return obs
 

@@ -17,10 +17,8 @@ class Main:
         self.gameIsRunning = False
         self.restart = False
         
-        # self.keyHeld = [False] * 8 #Noop, left, right, rotleft, rotright, softdrop, harddrop, hold
-        # self.keyHeldFrame = [0] * 8
-        self.keyHeld = np.zeros((8,), dtype=bool)
-        self.keyHeldFrame = np.zeros((8,), dtype=int)
+        self.keyHeld = np.zeros((7,), dtype=bool)
+        
         
         
     def run(self):
@@ -49,12 +47,11 @@ class Main:
                         done = True
                         self.gameIsRunning = False
                         break;
-                
-                agentAction = self.agent.predict(obs)[0]
-                self.updateKeyHeldFramesForAgent(agentAction)
-                inputAction = self.getAction()
-                obs, reward, terminated, truncated, info = self.env.step(inputAction)
-                
+                    
+                action = self.agent.predict(obs)[0]
+                print(action)
+                obs, reward, terminated, truncated, info = self.env.step(action)
+
                 if terminated or truncated:
                     done = True
                     break;
@@ -74,9 +71,7 @@ class Main:
                 break;
             
             self.events()
-            self.updateKeyHeldFrame()
-            action = self.getAction()
-            obs, reward, terminated, truncated, info = self.env.step(action)
+            obs, reward, terminated, truncated, info = self.env.step(self.keyHeld)
   
             
             if self.sfx and info["locked"]:
@@ -101,107 +96,43 @@ class Main:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
                     if self.sfx: tapSFX.play()
-                    self.keyHeld[1] = True
+                    self.keyHeld[0] = True
                 if event.key == pygame.K_RIGHT:
                     if self.sfx: tapSFX.play()
-                    self.keyHeld[2] = True
+                    self.keyHeld[1] = True
                 if event.key == pygame.K_z:
-                    self.keyHeld[3] = True
+                    self.keyHeld[2] = True
                 if event.key == pygame.K_x:
-                    self.keyHeld[4] = True
+                    self.keyHeld[3] = True
                 if event.key == pygame.K_DOWN:
-                    self.keyHeld[5] = True
+                    self.keyHeld[4] = True
                 if event.key == pygame.K_SPACE:
-                    self.keyHeld[6] = True
+                    self.keyHeld[5] = True
                 if event.key == pygame.K_r:
                     self.restart = True
                 if event.key == pygame.K_c:
-                    self.keyHeld[7] = True
+                    self.keyHeld[6] = True
                     
             
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_LEFT:
-                    self.keyHeld[1] = False
+                    self.keyHeld[0] = False
                 if event.key == pygame.K_RIGHT:
-                    self.keyHeld[2] = False
+                    self.keyHeld[1] = False
                 if event.key == pygame.K_z:
-                    self.keyHeld[3] = False
+                    self.keyHeld[2] = False
                 if event.key == pygame.K_x:
-                    self.keyHeld[4] = False
+                    self.keyHeld[3] = False
                 if event.key == pygame.K_DOWN:
-                    self.keyHeld[5] = False
+                    self.keyHeld[4] = False
                 if event.key == pygame.K_SPACE:
-                    self.keyHeld[6] = False
+                    self.keyHeld[5] = False
                 if event.key == pygame.K_c:
-                    self.keyHeld[7] = False
+                    self.keyHeld[6] = False
                     
-    
-    def updateKeyHeldFramesForAgent(self, action):
-        self.keyHeld[1] = action[0] == 1
-        self.keyHeld[2] = action[0] == 2
-        self.keyHeld[3] = action[1] == 1
-        self.keyHeld[4] = action[1] == 2
-        self.keyHeld[5] = action[2] == 1
-        self.keyHeld[6] = action[2] == 2
-        self.keyHeld[7] = action[3]
-        self.updateKeyHeldFrame()
-                    
-                    
-    
-    def updateKeyHeldFrame(self):
-        for i in range(len(self.keyHeld)):
-            if self.keyHeld[i]:
-                self.keyHeldFrame[i] += 1
-            else:
-                self.keyHeldFrame[i] = 0
-                
-                
-    def getDirection(self):
-        direction = 0
-        if self.keyHeld[1] and self.keyHeld[2]:
-            direction = 1 if self.keyHeldFrame[1] < self.keyHeldFrame[2] else 2
-        elif self.keyHeld[1] and not self.keyHeld[2]:
-            direction = 1
-        elif self.keyHeld[2] and not self.keyHeld[1]:
-            direction = 2
-            
-        return direction
-    
-    
-    def getRotation(self):
-        rotation = 0 #counter clockwise
-        if self.keyHeld[3] and self.keyHeldFrame[3] == 1: #left
-            rotation = 1
-        elif self.keyHeld[4] and self.keyHeldFrame[4] == 1: #right
-            rotation = 2 
-        return rotation
-    
-    
-    def getDrop(self):
-        drop = 0
-        if self.keyHeld[5]:
-            drop = 1
-        if self.keyHeld[6] and self.keyHeldFrame[6] == 1:
-            drop = 2
-        return drop
-    
-    
-    def getAction(self):
-        res = np.zeros((4,), dtype=np.int8)
-        res[0] = self.getDirection()
-        res[1] = self.getRotation()
-        res[2] = self.getDrop()
-        if self.keyHeld[7] and self.keyHeldFrame[7] == 1:
-            res[3] = True
-        return res
-    
-            
         
     
 if __name__ == '__main__':
-    #main = Main(player="human", render_mode='human', sfx=True)
-    #main = Main(player="agent", agent=RandomAgent(), render_mode='human', sfx=True)
-    #main.run()
     parser = argparse.ArgumentParser(description='Example')
     parser.add_argument('--player', type=str, default='human', help='human or agent', required=False)
     parser.add_argument('--agent', type=str, default=None, help='agent class', required=False)
@@ -214,23 +145,22 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     if args.train:
-        from stable_baselines3 import A2C
+        from stable_baselines3 import DDPG
         from stable_baselines3.common.env_util import make_vec_env
         from stable_baselines3.common.vec_env import SubprocVecEnv
         from gymnasium.wrappers import TimeLimit
         from stable_baselines3.common.env_checker import check_env
+        from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 
         # Parallel environments
         check_env(tetris_env.TetrisEnv())
-        vec_env = make_vec_env(tetris_env.TetrisEnv, 
-                               wrapper_class=TimeLimit,
-                               wrapper_kwargs={"max_episode_steps": 18000}, #5 minutes
-                               n_envs=8, 
-                               vec_env_cls=SubprocVecEnv)
+        env = tetris_env.TetrisEnv(render_mode="rgb_array")
+        n_actions = env.action_space.shape[-1]
+        action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-        model = A2C("MultiInputPolicy", vec_env, verbose=1, device="cpu")
-        model.learn(total_timesteps=10000)
-        model.save("a2ctetris")
+        model = DDPG("MultiInputPolicy", env, verbose=1,  action_noise=action_noise)
+        model.learn(total_timesteps=100000, log_interval=10)
+        model.save("ddpg")
             
     else:
         if not args.player in ["human", "agent"]:
@@ -267,9 +197,12 @@ if __name__ == '__main__':
             match args.agent:
                 case "random":
                     agent = RandomAgent()
-                case "a2c":
-                    from stable_baselines3 import A2C
-                    agent = A2C.load("a2ctetris")
+                case "ddpg":
+                    from stable_baselines3 import DDPG
+                    agent = DDPG.load("ddpg")
+                case "KD":
+                    from agent import KeepDropAgent
+                    agent = KeepDropAgent()
                 case _:
                     print("unsupported agent")
                     exit()
