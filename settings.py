@@ -44,6 +44,7 @@ SOFT_DROP_INTERVAL = 1
 LOCK_DELAY = 60
 FORCE_LOCK_DELAY = 300
 
+
 # DAS = 6
 # ARR = 0 #if 0, then teleport
 

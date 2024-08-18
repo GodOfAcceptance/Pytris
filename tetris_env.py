@@ -56,15 +56,16 @@ class TetrisEnv(gym.Env):
         self.DAS = DAS
         self.ARR = ARR #if 0, then teleport
         
+        
         self.action_space = spaces.MultiDiscrete([3,3,3,2], dtype=int)
     
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
-            "curr": spaces.Discrete(7), 
-            "rotation": spaces.Discrete(4), #0, 1, 2, 3
-            "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
-            "hold": spaces.Discrete(8,), #7 tetrominoes + none
-            "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
+            # "curr": spaces.Discrete(7), 
+            # "rotation": spaces.Discrete(4), #0, 1, 2, 3
+            # "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
+            # "hold": spaces.Discrete(8,), #7 tetrominoes + none
+            # "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
         })
     
     
@@ -97,11 +98,8 @@ class TetrisEnv(gym.Env):
         self.lock_t = 0
         self.drop_t = DROP_INTERVAL
         self.soft_t = SOFT_DROP_INTERVAL
-        
-        
-        ## Reward related variables
-        self.finesse = 0 #Higher = worse
-        self.KPP = 0 #keys per piece. Higher = worse
+        self.force_lock_t = 0
+
 
 
         ## INFO
@@ -166,6 +164,7 @@ class TetrisEnv(gym.Env):
                 self.resetDAS()
                 
             if direction != 0:
+                self.lock_t = 0.0
                 if self.das_t == 0:
                     self.das_t = now
                     self.arr_t = now
@@ -176,6 +175,7 @@ class TetrisEnv(gym.Env):
                     self.arr_t = now
 
             if rotation != 0:
+                self.lock_t = 0.0
                 if self._doesFit(self.curr_piece_type, (self.rotation - rotation) % 4, self.px, self.py):
                     self.rotation = (self.rotation - rotation) % 4
                 else:
@@ -185,7 +185,7 @@ class TetrisEnv(gym.Env):
             if self.gravityOn:
                 self.soft_t = SOFT_DROP_INTERVAL
                 if self.drop_t >= DROP_INTERVAL:
-                    self.startLocking = self._gravity_fall()
+                    self._gravity_fall()
                     self.drop_t = 0.0
                 else:
                     self.drop_t += 1
@@ -193,27 +193,36 @@ class TetrisEnv(gym.Env):
             if self.softDropOn:
                 self.drop_t = 0.0
                 if self.soft_t >= SOFT_DROP_INTERVAL:
-                    self.startLocking = self._softDrop()
+                    self._softDrop()
                     self.soft_t = 0.0
                 else:
                     self.soft_t += 1
-
+            
+            self.startLocking = not self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py + 1)
             if self.startLocking:
-                if self.lock_t < LOCK_DELAY:
-                    self.lock_t += 1
-                else:
+                self.force_lock_t += 1
+                if self.lock_t >= LOCK_DELAY or self.force_lock_t >= FORCE_LOCK_DELAY:
                     self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
                     clearCount = self._clearLines()
                     info["locked"] = True
                     self._spawn()
-            else:
-                self.lock_t = 0.0
+                else:
+                    self.lock_t += 1
+                
+            
+        print(self.startLocking, self.lock_t, self.force_lock_t)
 
         self._setGhostCoord()
         
+        self.totalScore += REWARD_MAP[clearCount] #this is for human display only.
         ## start reward calculation
+        num_holes = self._nHoles(self.board)
+        num_pits = self._nPits(self.board)
+        scale_factor = 1 / (0.76 + 0.357 + 0.2)
+        reward = scale_factor * ((clearCount / 4) * 0.76 + 
+                  (num_holes / 100) * -0.5 +
+                  ((num_pits - 1) / (10)) * -0.2 + 1)
         
-
         if self.render_mode == 'human':
             self.render()
 
@@ -240,7 +249,59 @@ class TetrisEnv(gym.Env):
     
     
     
+    
+    
+    
     ##################   HELPER FUNCTIONS   ######################
+    def _nHoles(self, board):
+        """
+        Returns the number of holes in the board.
+        A hole is defined as an empty cell with at least one filled cell above it.
+        """
+        rows, cols = board.shape
+        holes = 0
+
+        for col in range(cols):
+            filled = False
+            for row in range(rows):
+                if board[row][col] != 0:
+                    filled = True
+                elif filled:
+                    # There's a filled cell above and this cell is empty, so it's a hole.
+                    holes += 1
+        return holes
+    
+    
+    def _nPits(self, board):
+        """
+        Returns the number of pits in the board.
+        A pit is defined as an empty column of height >= 2, surrounded by filled columns on the sides.
+        """
+        #Get the colum height of left and right. Then, check if the middle column is a pit.
+        count = 0
+        for col in range(1, COLUMNS-1):
+            left = self._columnHeight(board, col-1)
+            right = self._columnHeight(board, col+1)
+            middle = self._columnHeight(board, col)
+            if middle >= 2 and left >= middle and right >= middle:
+                count += 1
+                
+        return count
+    
+
+    def _columnHeight(self, board, col):
+        """
+        Returns the height of the column.
+        Requires: 0 <= col < COLUMNS.
+        
+        col = 0 and col = COLUMNS-1 always return ROWS-1.
+        """
+        for row in range(ROWS-1):
+            if board[row][col] != 0:
+                return ROWS-1 - row #don't include the bottom wall.
+        return 0
+                    
+        
         
     def convert_action(self, rawAction):
         """
@@ -262,11 +323,11 @@ class TetrisEnv(gym.Env):
         
     def _getObs(self):
         obs =  {"board": self.board.copy(), 
-                "curr": self.curr_piece_type, 
-                "rotation": self.rotation, 
-                "pos": np.array([self.px, self.py]), 
-                "hold": self.heldPiece,
-                "preview": np.array(self.queue)
+                # "curr": self.curr_piece_type, 
+                # "rotation": self.rotation, 
+                # "pos": np.array([self.px, self.py]), 
+                # "hold": self.heldPiece,
+                # "preview": np.array(self.queue)
                 }
         return obs
 
@@ -332,7 +393,6 @@ class TetrisEnv(gym.Env):
         
         
     def horizontalMove(self, direction, instant=False):
-        self.lock_t = 0.0
         if instant:
             while self._doesFit(self.curr_piece_type, self.rotation, self.px+direction, self.py):
                 self.px += direction
@@ -444,13 +504,12 @@ class TetrisEnv(gym.Env):
  
         self.drop_t = DROP_INTERVAL
         self.soft_t = SOFT_DROP_INTERVAL
-        self.lock_t = 0.0
+        self.lock_t = 0
+        self.force_lock_t = 0
         self.queue.append(next(self.bag))
         
         self.holdAllowed = True
-        
-        self.finesse = 0
-        self.KPP = 0
+    
                 
         if not self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py):
             self.gameOver = True
