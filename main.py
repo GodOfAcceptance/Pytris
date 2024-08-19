@@ -144,22 +144,19 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     if args.train:
-        from stable_baselines3 import DDPG
+        from stable_baselines3 import PPO
         from stable_baselines3.common.env_util import make_vec_env
         from stable_baselines3.common.vec_env import SubprocVecEnv
         from gymnasium.wrappers import TimeLimit
-        from stable_baselines3.common.env_checker import check_env
-        from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
+        
+        
 
-        # Parallel environments
-        check_env(tetris_env.TetrisEnv())
-        env = tetris_env.TetrisEnv(render_mode="rgb_array")
-        n_actions = env.action_space.shape[-1]
-        action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
-
-        model = DDPG("MultiInputPolicy", env, verbose=1,  action_noise=action_noise)
-        model.learn(total_timesteps=100000, log_interval=10)
-        model.save("ddpg")
+        vec_env = make_vec_env(tetris_env.TetrisEnv, wrapper_class=TimeLimit, wrapper_kwargs={"max_episode_steps":30000}, n_envs=16)
+        
+        model = PPO("MultiInputPolicy", vec_env, verbose=1)
+        model.learn(total_timesteps=1000000, progress_bar=True)
+        model.save("ppo")
+        
             
     else:
         if not args.player in ["human", "agent"]:
@@ -196,9 +193,9 @@ if __name__ == '__main__':
             match args.agent:
                 case "random":
                     agent = RandomAgent()
-                case "ddpg":
-                    from stable_baselines3 import DDPG
-                    agent = DDPG.load("ddpg")
+                case "ppo":
+                    from stable_baselines3 import PPO
+                    agent = PPO.load("ppo")
                 case "KD":
                     from agent import KeepDropAgent
                     agent = KeepDropAgent()

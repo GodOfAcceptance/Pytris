@@ -44,7 +44,6 @@ class TetrisEnv(gym.Env):
         first time.
         """
         super().__init__()
-        self.ctrl = Controller()
         self.render_mode = render_mode
         self.screen = None
         self.clock = None
@@ -56,15 +55,10 @@ class TetrisEnv(gym.Env):
         self.DAS = DAS
         self.ARR = ARR #if 0, then teleport
         
-        self.action_space = spaces.Box(0,1, shape=(7,), dtype=int)
+        self.action_space = spaces.MultiBinary(7)
     
         self.observation_space = spaces.Dict({
             "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
-            "curr": spaces.Discrete(7), 
-            "rotation": spaces.Discrete(4), #0, 1, 2, 3
-            "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
-            "hold": spaces.Discrete(8,), #7 tetrominoes + none
-            "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
             "curr": spaces.Discrete(7), 
             "rotation": spaces.Discrete(4), #0, 1, 2, 3
             "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
@@ -75,6 +69,7 @@ class TetrisEnv(gym.Env):
     
     def reset(self, seed=None):
         super().reset(seed=seed)
+        self.ctrl = Controller()
         self.gameOver = False
         self.totalScore = 0
         self.totalSteps = 0
@@ -117,7 +112,6 @@ class TetrisEnv(gym.Env):
             self.render()
         
         return self._getObs(), {}
-    
     
         
     def step(self, input):
@@ -229,7 +223,7 @@ class TetrisEnv(gym.Env):
         nholes = self._nHoles(self.board)
         bumpiness = self._bumpiness(self.board)
         fitness = (-0.51 * height) + (0.76 * lines) + (-0.36 * nholes) + (-0.18 * bumpiness)
-        reward = self.previousFitness - fitness
+        reward = fitness - self.previousFitness
         self.previousFitness = fitness
 
         if self.render_mode == 'human':
@@ -333,11 +327,6 @@ class TetrisEnv(gym.Env):
         
     def _getObs(self):
         obs =  {"board": self.board.copy(), 
-                "curr": self.curr_piece_type, 
-                "rotation": self.rotation, 
-                "pos": np.array([self.px, self.py]), 
-                "hold": self.heldPiece,
-                "preview": np.array(self.queue)
                 "curr": self.curr_piece_type, 
                 "rotation": self.rotation, 
                 "pos": np.array([self.px, self.py]), 
