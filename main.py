@@ -5,17 +5,18 @@ from settings import *
 from agent import RandomAgent
 
 class Main:
-    def __init__(self, player, agent, render_mode, nEpisodes, sfx, DAS, ARR):
+    def __init__(self, player, agent, game_mode, render_mode, nEpisodes, sfx, DAS, ARR):
         assert player in ["human", "agent"], "unsupported player. Available: human, agent"
         assert nEpisodes > 0, "n_episodes must be greater than 0"
 
         self.sfx = sfx
         self.player = player
         self.agent = agent
-        self.env = tetris_env.TetrisEnv(render_mode=render_mode, DAS=DAS, ARR=ARR)
+        self.env = tetris_env.TetrisEnv(game_mode=game_mode, render_mode=render_mode, DAS=DAS, ARR=ARR)
         self.nEpisodes = nEpisodes
         self.gameIsRunning = False
         self.restart = False
+        self.game_mode = game_mode
         
         self.keyHeld = np.zeros((7,), dtype=bool)
         
@@ -83,6 +84,7 @@ class Main:
         if self.restart:
             self.restart = False
             self.playHuman()
+        
         self.env.close()
         
 
@@ -141,6 +143,7 @@ if __name__ == '__main__':
     parser.add_argument('--ARR', type=int, default=1, help='auto repeat rate in frames', required=False)
     parser.add_argument('--n_episodes', type=int, default=5, help='number of episodes', required=False)
     parser.add_argument('--train', action='store_true', help='train agent', required=False)
+    parser.add_argument('--game_mode', type=int, default=0, help='game mode', required=False)
     
     args = parser.parse_args()
     if args.train:
@@ -187,6 +190,10 @@ if __name__ == '__main__':
             print("n_episodes must be greater than 0")
             exit()
             
+        if args.game_mode not in [0, 1]:
+            print("unsupported game mode")
+            exit()
+            
 
         agent = None
         if args.agent is not None:
@@ -205,7 +212,8 @@ if __name__ == '__main__':
         
         
         main = Main(player=args.player, 
-                    agent=agent, 
+                    agent=agent,
+                    game_mode = args.game_mode, 
                     render_mode=args.render_mode,
                     nEpisodes=args.n_episodes, 
                     sfx=args.sfx, 

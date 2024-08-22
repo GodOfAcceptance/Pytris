@@ -32,9 +32,14 @@ class TetrisEnv(gym.Env):
                 "hold": self.heldPiece,
                 "preview": self.queue.copy()
                 })
+                
+    
+    Different modes available:
+        -0: Infinite mode
+        -1: 40 lines mode
     
     """
-    def __init__(self, render_mode = None, DAS=8, ARR=1):
+    def __init__(self, game_mode=0, render_mode=None, DAS=8, ARR=1):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         """
         If human-rendering is used, `self.screen` will be a reference
@@ -50,8 +55,8 @@ class TetrisEnv(gym.Env):
         
         self.board = None
         self.preview = None
-        self.stats = None
         
+        self.gameMode = game_mode
         self.DAS = DAS
         self.ARR = ARR #if 0, then teleport
         
@@ -76,6 +81,12 @@ class TetrisEnv(gym.Env):
         
         ## Board setup
         self._resetBoard()
+        
+        ## 40 lines mode set up
+        self.linesCleared = 0
+        self.linesToClear = 40
+        self.linesLabel = FONT.render(str(self.linesToClear), 5, GRAY)
+        
         
         ## Piece setup
         self.bag = self._7bagRandomizer()
@@ -215,8 +226,13 @@ class TetrisEnv(gym.Env):
                     self.lock_t += 1
 
         self._setGhostCoord()
+
+
         
         self.totalScore += REWARD_MAP[clearCount] #this is for human display only.
+        self.linesCleared += clearCount
+        self.linesToClear -= clearCount
+        
         ## start reward calculation
         height = self._aggregateHeight(self.board)
         lines = clearCount
@@ -230,6 +246,9 @@ class TetrisEnv(gym.Env):
             self.render()
 
         observation = self._getObs()
+        
+        if(self.gameMode == 1 and self.linesCleared == 40):
+            self.gameOver = True
             
         return observation, reward, terminated, truncated, info
     
@@ -685,8 +704,11 @@ class TetrisEnv(gym.Env):
             self.stat_surface.fill(0)
             timeLabel = FONT.render("Time  ", 5, GRAY)
             scoreLabel = FONT.render("Score  ", 5, GRAY)
+            linesLabel = FONT.render("Lines Left  ", 5, GRAY)
             self.stat_surface.blit(timeLabel, (STAT_WIDTH / 2 - timeLabel.get_width(), CELL_SIZE ))
-            self.stat_surface.blit(scoreLabel, (STAT_WIDTH / 2 - timeLabel.get_width(), CELL_SIZE * 2 ))
+            self.stat_surface.blit(scoreLabel, (STAT_WIDTH / 2 - scoreLabel.get_width(), CELL_SIZE * 2 ))
+            if(self.gameMode == 1):
+                self.stat_surface.blit(linesLabel, (STAT_WIDTH / 2 - linesLabel.get_width(), CELL_SIZE * 3 ))
             
         if self.renderTimeCooldown < 100:
             self.renderTimeCooldown += 1000.0 / self.metadata["render_fps"]
@@ -703,7 +725,16 @@ class TetrisEnv(gym.Env):
             scoreLabel = FONT.render(str(self.totalScore), 5, GRAY)
         self._renderScore(scoreLabel, self.stat_surface)
         
+        
+        if(self.gameMode == 1):
+            linesToClearLabel = FONT.render(str(self.linesToClear), 5, GRAY)
+            self.render_lines_to_clear(linesToClearLabel, self.stat_surface)
+        
         canvas.blit(self.stat_surface, (PADDING + HOLD_WIDTH, PADDING + BOARD_SURFACE_HEIGHT))
+        
+        
+    def render_lines_to_clear(self, label, dest):
+        dest.blit(label, (STAT_WIDTH / 2, CELL_SIZE * 3))
         
     
     def _render_time(self, timeLabel, dest):            
