@@ -49,7 +49,6 @@ class Main:
                         break;
                     
                 action = self.agent.predict(obs)[0]
-                print(action)
                 obs, reward, terminated, truncated, info = self.env.step(action)
 
                 if terminated or truncated:

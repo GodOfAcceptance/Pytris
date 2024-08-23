@@ -1,13 +1,11 @@
-This is a game of tetris with proper DAS, ARR, SRS support. 
-Many implementations of modern tetris does not handle inputs well, but mine does handle it correctly.
+A Tetris Environment that inherits gymnasium environment.
+This environment implements all modern tetris features: DAS, ARR, SRS, 7Bag randomizer.
+The player makes an action through a controller, which receives binary input for each corresponding key.
+There are 7 keys: left, right, rotate left, rotate right, soft drop, hard drop, hold.
 
-settings.py -- settings like screen layout, DAS, ARR, tetrominoes, etc.
-tetris_env.py -- a tetris game state that implements gymnasium.Env. Could be improved and used for future RL training.
-main.py -- main application from which you can play the game.
-agent.py -- contains a random action agent.
+You can play the game by yourself by running "python main.py". Add --sfx to enable sound effects.
+Currently, no reinforcement learning agent is available due to my skill issue.
+However, you can run a random agent or keep-dropping agent: python main.py --player "agent" --agent "random" (or "KD")
 
-How to play: 
-Type "python main.py" into command line. Specify required arguments: player and render mode. 
-Currently, you can only play as yourself or a random action agent.
-
+Action Space: MultiBinary(7)
 
