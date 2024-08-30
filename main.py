@@ -35,7 +35,7 @@ class Main:
         
         for episode in range(nEpisodes):
             if not self.gameIsRunning:
-                break;
+                break
             
             obs, info = self.env.reset()
             done = False
@@ -46,14 +46,14 @@ class Main:
                     if event.type == pygame.QUIT:
                         done = True
                         self.gameIsRunning = False
-                        break;
+                        break
                     
                 action = self.agent.predict(obs)[0]
                 obs, reward, terminated, truncated, info = self.env.step(action)
 
                 if terminated or truncated:
                     done = True
-                    break;
+                    break
         
         self.gameIsRunning = False
         self.env.close()
@@ -67,7 +67,7 @@ class Main:
         while self.gameIsRunning:
             if self.restart:
                 self.gameIsRunning = False
-                break;
+                break
             
             self.events()
             obs, reward, terminated, truncated, info = self.env.step(self.keyHeld)
@@ -78,7 +78,7 @@ class Main:
                 
             if terminated or truncated:
                 self.gameIsRunning = False
-                break;
+                break
             
         if self.restart:
             self.restart = False
@@ -91,7 +91,7 @@ class Main:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.gameIsRunning = False
-                break;
+                break
             
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_LEFT:
@@ -156,7 +156,7 @@ if __name__ == '__main__':
         vec_env = make_vec_env(tetris_env.TetrisEnv, wrapper_class=TimeLimit, wrapper_kwargs={"max_episode_steps":30000}, n_envs=16)
         
         model = PPO("MultiInputPolicy", vec_env, verbose=1)
-        model.learn(total_timesteps=1000000, progress_bar=True)
+        model.learn(total_timesteps=1, progress_bar=True)
         model.save("ppo")
         
             

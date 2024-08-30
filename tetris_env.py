@@ -33,7 +33,6 @@ class TetrisEnv(gym.Env):
                 "preview": self.queue.copy()
                 })
                 
-    
     Different modes available:
         -0: Infinite mode
         -1: 40 lines mode
@@ -393,6 +392,7 @@ class TetrisEnv(gym.Env):
         
         assert self.board.shape == (ROWS, COLUMNS)
         return clearCount
+
             
     
     def _pullBoardDown(self, count, start):
@@ -564,7 +564,6 @@ class TetrisEnv(gym.Env):
                             return False
                         
         return True
-    
     
 
     def _render_frame(self, mode):
