@@ -233,14 +233,7 @@ class TetrisEnv(gym.Env):
         self.linesToClear -= clearCount
         
         ## start reward calculation
-        height = self._aggregateHeight(self.board)
-        lines = clearCount
-        nholes = self._nHoles(self.board)
-        bumpiness = self._bumpiness(self.board)
-        fitness = (-0.51 * height) + (0.76 * lines) + (-0.36 * nholes) + (-0.18 * bumpiness) + (-0.2 * (self.numRotations - 2))
-        reward = (fitness - self.previousFitness)
-        self.previousFitness = fitness
-        
+    
 
         if self.render_mode == 'human':
             self.render()
