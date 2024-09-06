@@ -395,12 +395,20 @@ class TetrisEnv(gym.Env):
 
             
     
+    # def _pullBoardDown(self, count, start):
+    #     clipped = self.board[:start-count+1].copy()
+    #     fullClip = clipped
+    #     for _ in range(count):
+    #         fullClip = np.vstack([NEW_LINE, fullClip])
+    #     self.board[start-count+1:start+1] = NEW_LINE
+    #     self.board[:start+1] = fullClip
+
     def _pullBoardDown(self, count, start):
         clipped = self.board[:start-count+1].copy()
-        fullClip = clipped
-        for _ in range(count):
-            fullClip = np.vstack([NEW_LINE, fullClip])
-        self.board[start-count+1:start+1] = NEW_LINE
+        # Create 'count' new rows (NEW_LINE) and stack them with the clipped array in one step
+        new_rows = np.tile(NEW_LINE, (count, 1))
+        fullClip = np.vstack([new_rows, clipped])
+        # Replace the corresponding part of the board with the new rows
         self.board[:start+1] = fullClip
     
     
