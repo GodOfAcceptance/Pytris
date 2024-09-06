@@ -56,9 +56,8 @@ class TetrisEnv(gym.Env):
         self.preview = None
         
         self.gameMode = game_mode
-        self.DAS = DAS
-        self.ARR = ARR #if 0, then teleport
-        
+        self.ctrl = Controller(DAS, ARR)
+                
         self.action_space = spaces.MultiBinary(7)
     
         self.observation_space = spaces.Dict({
@@ -73,7 +72,7 @@ class TetrisEnv(gym.Env):
     
     def reset(self, seed=None):
         super().reset(seed=seed)
-        self.ctrl = Controller()
+        self.ctrl.reset()
         self.gameOver = False
         self.totalScore = 0
         self.totalSteps = 0
@@ -102,8 +101,6 @@ class TetrisEnv(gym.Env):
         self.startLocking = False
         
         self.previous_dir = 0
-        self.das_t = 0
-        self.arr_t = 0
         self.lock_t = 0
         self.drop_t = DROP_INTERVAL
         self.soft_t = SOFT_DROP_INTERVAL
@@ -175,18 +172,18 @@ class TetrisEnv(gym.Env):
                 truncated = True
                 
             if self.previous_dir != direction or direction == 0:
-                self.resetDAS()
+                self.ctrl.resetDAS()
                 
             if direction != 0:
                 self.lock_t = 0.0
-                if self.das_t == 0:
-                    self.das_t = now
-                    self.arr_t = now
+                if self.ctrl.das_t == 0:
+                    self.ctrl.das_t = now
+                    self.ctrl.arr_t = now
                     self.horizontalMove(direction)
-                elif (now - self.das_t >= self.DAS) and (now - self.arr_t >= self.ARR):
-                    instant = self.ARR == 0
+                elif (now - self.ctrl.das_t >= self.ctrl.DAS) and (now - self.ctrl.arr_t >= self.ctrl.ARR):
+                    instant = self.ctrl.ARR == 0
                     self.horizontalMove(direction, instant)
-                    self.arr_t = now
+                    self.ctrl.arr_t = now
 
             if rotation != 0:
                 self.numRotations += 1
@@ -410,11 +407,6 @@ class TetrisEnv(gym.Env):
         self.ghostY = self.py
         while self._doesFit(self.curr_piece_type, self.rotation, self.ghostX, self.ghostY + 1):
             self.ghostY += 1
-        
-        
-    def resetDAS(self):
-        self.das_t = 0.0
-        self.arr_t = 0.0
         
         
     def horizontalMove(self, direction, instant=False):

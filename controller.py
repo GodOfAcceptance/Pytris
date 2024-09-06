@@ -1,8 +1,25 @@
 import numpy as np
 class Controller:
-    def __init__(self):
+    def __init__(self, das, arr):
+        self.DAS = das
+        self.ARR = arr
+        self.reset()
+    
+
+    def reset(self):
         self.keyHeld = [False] * 7
         self.keyHeldFrame = [0] * 7
+
+        self.das_t = 0 
+        self.arr_t = 0
+
+        self.direction = None
+        self.prevDirection = None 
+
+
+    def resetDAS(self):
+        self.das_t = 0
+        self.arr_t = 0
         
         
     def updateKeyHeldFramesForAgent(self, action):
