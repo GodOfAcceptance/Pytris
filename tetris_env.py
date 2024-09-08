@@ -24,14 +24,7 @@ class TetrisEnv(gym.Env):
     Action space: Box(0, 2, shape=(7,) dtype=int)
     [left, right, rotate left, rotate right, soft drop, hard drop, hold]
     
-    Observation space: spaces.Dict(
-             {"board": self.board.copy(), 
-                "curr": self.curr_piece_type, 
-                "rotation": self.rotation, 
-                "pos": (self.px, self.py), 
-                "hold": self.heldPiece,
-                "preview": self.queue.copy()
-                })
+    Observation space: a flattened 1D array of the board.
                 
     Different modes available:
         -0: Infinite mode
@@ -61,7 +54,7 @@ class TetrisEnv(gym.Env):
         self.action_space = spaces.MultiBinary(7)
     
         self.observation_space = spaces.Dict({
-            "board": spaces.Box(0, 9, shape=(ROWS,COLUMNS), dtype=int),
+            "board": spaces.Box(0, 9, shape=(ROWS * COLUMNS,), dtype=int),
             # "curr": spaces.Discrete(7), 
             # "rotation": spaces.Discrete(4), #0, 1, 2, 3
             # "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
@@ -129,6 +122,8 @@ class TetrisEnv(gym.Env):
         clearCount = 0
         truncated = self.totalSteps > 5000 and self.totalScore < 100
         terminated = self.gameOver
+        locked = False
+        hold = False
         info = {"locked": False, "hold": False} #used for vfx in human play mode.
         
         if self.gameOver:
@@ -148,7 +143,7 @@ class TetrisEnv(gym.Env):
         
         if hold and self.holdAllowed: #hold
             self._swap()
-            info["hold"] = True
+            hold = True
             observation = self._getObs()
             return observation, reward, terminated, truncated, info
             
@@ -157,9 +152,8 @@ class TetrisEnv(gym.Env):
             self._hard_drop()
             self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
             clearCount = self._clearLines()
-            info["locked"] = True
-            self._spawn()
-             
+            locked = True
+
         else:
             if drop == 1:
                 self.gravityOn = False
@@ -216,29 +210,32 @@ class TetrisEnv(gym.Env):
                 if self.lock_t >= LOCK_DELAY or self.force_lock_t >= FORCE_LOCK_DELAY:
                     self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
                     clearCount = self._clearLines()
-                    info["locked"] = True
-                    self._spawn()
+                    locked = True
                 else:
                     self.lock_t += 1
 
-        self._setGhostCoord()
-
-
-        
         self.totalScore += REWARD_MAP[clearCount] #this is for human display only.
         self.linesCleared += clearCount
         self.linesToClear -= clearCount
         
         ## start reward calculation
-    
+        reward = REWARD_MAP[clearCount] + (-1 * (self.numRotations > 2) * self.numRotations)
+        info = {"locked" : locked, "hold": hold}
+
+        if drop == 2:
+            print(reward)
+
+        if locked:
+            self._spawn()   
+
+        self._setGhostCoord()
+        observation = self._getObs()
+
+        if(self.gameMode == 1 and self.linesCleared == 40):
+            self.gameOver = True
 
         if self.render_mode == 'human':
             self.render()
-
-        observation = self._getObs()
-        
-        if(self.gameMode == 1 and self.linesCleared == 40):
-            self.gameOver = True
             
         return observation, reward, terminated, truncated, info
     
@@ -335,7 +332,7 @@ class TetrisEnv(gym.Env):
         
         
     def _getObs(self):
-        obs =  {"board": self.board.copy(), 
+        obs =  {"board": self.board.copy().flatten(), 
                 # "curr": self.curr_piece_type, 
                 # "rotation": self.rotation, 
                 # "pos": np.array([self.px, self.py]), 
