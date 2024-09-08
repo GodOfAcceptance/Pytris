@@ -146,18 +146,22 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     if args.train:
-        from stable_baselines3 import PPO
+        from stable_baselines3 import A2C
         from stable_baselines3.common.env_util import make_vec_env
         from stable_baselines3.common.vec_env import SubprocVecEnv
-        from gymnasium.wrappers import TimeLimit
-        
-        
+        from stable_baselines3.common.env_checker import check_env
+        from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 
-        vec_env = make_vec_env(tetris_env.TetrisEnv, wrapper_class=TimeLimit, wrapper_kwargs={"max_episode_steps":30000}, n_envs=16)
         
-        model = PPO("MultiInputPolicy", vec_env, verbose=1)
-        model.learn(total_timesteps=1, progress_bar=True)
-        model.save("ppo")
+        check_env(tetris_env.TetrisEnv())
+        vec_env = make_vec_env(tetris_env.TetrisEnv, n_envs=10, vec_env_cls=SubprocVecEnv)
+        callback = StopTrainingOnRewardThreshold(reward_threshold=1600, verbose=1)
+        eval_callback = EvalCallback(vec_env, callback_on_new_best=callback, verbose=1)
+        
+        model = A2C("MultiInputPolicy", vec_env, verbose=1, device="cpu",
+                    gae_lambda=0.96, gamma=0.98)
+        model.learn(total_timesteps=3000000, progress_bar=True, callback=eval_callback)
+        model.save("a2c")
         
             
     else:
@@ -199,9 +203,9 @@ if __name__ == '__main__':
             match args.agent:
                 case "random":
                     agent = RandomAgent()
-                case "ppo":
-                    from stable_baselines3 import PPO
-                    agent = PPO.load("ppo")
+                case "a2c":
+                    from stable_baselines3 import A2C
+                    agent = A2C.load("a2c")
                 case "KD":
                     from agent import KeepDropAgent
                     agent = KeepDropAgent()
@@ -213,7 +217,7 @@ if __name__ == '__main__':
         main = Main(player=args.player, 
                     agent=agent,
                     game_mode = args.game_mode, 
-                    render_mode=args.render_mode,
+                    render_mode= None if args.train else args.render_mode,
                     nEpisodes=args.n_episodes, 
                     sfx=args.sfx, 
                     DAS=args.DAS, 
