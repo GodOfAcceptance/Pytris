@@ -31,7 +31,7 @@ class TetrisEnv(gym.Env):
         -1: 40 lines mode
     
     """
-    def __init__(self, game_mode=0, render_mode=None, DAS=8, ARR=1):
+    def __init__(self, game_mode=0, render_mode=None, DAS=8, ARR=1, train_mode=False):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         """
         If human-rendering is used, `self.screen` will be a reference
@@ -50,17 +50,12 @@ class TetrisEnv(gym.Env):
         
         self.gameMode = game_mode
         self.ctrl = Controller(DAS, ARR)
+        self.isTraining = train_mode
                 
-        self.action_space = spaces.MultiBinary(7)
-    
-        self.observation_space = spaces.Dict({
-            "board": spaces.Box(0, 9, shape=(ROWS * COLUMNS,), dtype=int),
-            # "curr": spaces.Discrete(7), 
-            # "rotation": spaces.Discrete(4), #0, 1, 2, 3
-            # "pos": spaces.Box(low=np.array([1, 0]), high=np.array([COLUMNS - 2, ROWS - 2]), dtype=int),
-            # "hold": spaces.Discrete(8,), #7 tetrominoes + none
-            # "preview": spaces.Box(0,6, shape=(NUM_PREVIEW,), dtype=int),
-        })
+        # self.action_space = spaces.MultiBinary(7)
+        self.action_space = spaces.Box(0,1,shape=(7,),dtype=np.float32)
+
+        self.observation_space = spaces.Box(0, 9, shape=(ROWS * COLUMNS,), dtype=int)
     
     
     def reset(self, seed=None):
@@ -71,7 +66,7 @@ class TetrisEnv(gym.Env):
         self.totalSteps = 0
         
         ## Board setup
-        self._resetBoard()
+        self.board = np.zeros((ROWS,COLUMNS), dtype = np.int8)
         
         ## 40 lines mode set up
         self.linesCleared = 0
@@ -83,7 +78,7 @@ class TetrisEnv(gym.Env):
         self.bag = self._7bagRandomizer()
         self._initializePieceQueue()
         self._spawn()
-        self._setGhostCoord()
+        self._setGhostCoord(self.board, self.curr_piece_type, self.px, self.py, self.rotation)
         self.holdAllowed = True
         self.heldPiece = 7 #none
         
@@ -132,7 +127,7 @@ class TetrisEnv(gym.Env):
         self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
         now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
         
-        self.ctrl.keyHeld = input
+        self.ctrl.keyHeld = input if not self.isTraining else self.cont_to_bin(input)
         self.ctrl.updateKeyHeldFrame()
         action = self.ctrl.getAction()
        
@@ -150,8 +145,8 @@ class TetrisEnv(gym.Env):
             
         if drop == 2: #Hard drop
             self._hard_drop()
-            self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
-            clearCount = self._clearLines()
+            self._lock_piece(self.board, self.curr_piece_type, self.rotation, self.px, self.py)
+            clearCount = self._clearLines(self.board)
             locked = True
 
         else:
@@ -182,16 +177,16 @@ class TetrisEnv(gym.Env):
             if rotation != 0:
                 self.numRotations += 1
                 self.lock_t = 0.0
-                if self._doesFit(self.curr_piece_type, (self.rotation - rotation) % 4, self.px, self.py):
+                if self._doesFit(self.board, self.curr_piece_type, (self.rotation - rotation) % 4, self.px, self.py):
                     self.rotation = (self.rotation - rotation) % 4
                 else:
-                    self._wallKick(self.curr_piece_type, (self.rotation - rotation) % 4)
+                    self._wallKick(self.board, self.curr_piece_type, (self.rotation - rotation) % 4)
             
             
             if self.gravityOn:
                 self.soft_t = SOFT_DROP_INTERVAL
                 if self.drop_t >= DROP_INTERVAL:
-                    self._gravity_fall()
+                    self._gravity_fall(self.board, self.curr_piece_type, self.px, self.py, self.rotation)
                     self.drop_t = 0.0
                 else:
                     self.drop_t += 1
@@ -204,12 +199,12 @@ class TetrisEnv(gym.Env):
                 else:
                     self.soft_t += 1
             
-            self.startLocking = not self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py + 1)
+            self.startLocking = not self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py + 1)
             if self.startLocking:
                 self.force_lock_t += 1
                 if self.lock_t >= LOCK_DELAY or self.force_lock_t >= FORCE_LOCK_DELAY:
-                    self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
-                    clearCount = self._clearLines()
+                    self._lock_piece(self.board, self.curr_piece_type, self.rotation, self.px, self.py)
+                    clearCount = self._clearLines(self.board)
                     locked = True
                 else:
                     self.lock_t += 1
@@ -219,16 +214,18 @@ class TetrisEnv(gym.Env):
         self.linesToClear -= clearCount
         
         ## start reward calculation
-        reward = REWARD_MAP[clearCount] + (-1 * (self.numRotations > 2) * self.numRotations)
+        fitness = -self._nHoles(self.board) - self.previousFitness
+        self.previousFitness = fitness
+        reward = REWARD_MAP[clearCount] + (-0.5 * (self.numRotations > 2) * self.numRotations)
         info = {"locked" : locked, "hold": hold}
 
-        if drop == 2:
-            print(reward)
+        # if drop == 2:
+        #     print(reward)
 
         if locked:
-            self._spawn()   
+            self._spawn()  
 
-        self._setGhostCoord()
+        self._setGhostCoord(self.board, self.curr_piece_type, self.px, self.py, self.rotation)
         observation = self._getObs()
 
         if(self.gameMode == 1 and self.linesCleared == 40):
@@ -238,6 +235,7 @@ class TetrisEnv(gym.Env):
             self.render()
             
         return observation, reward, terminated, truncated, info
+
     
     
     def render(self):
@@ -257,6 +255,9 @@ class TetrisEnv(gym.Env):
 
     
     ##################   HELPER FUNCTIONS   ######################
+    def cont_to_bin(self, contAction):
+        return np.round(contAction).astype(int)
+    
     
     def _bumpiness(self, board):
         total = 0
@@ -322,24 +323,9 @@ class TetrisEnv(gym.Env):
                 return ROWS-1 - row #don't include the bottom wall.
         return 0
                     
-    
-         
-    def _resetBoard(self):
-        self.board = np.zeros((ROWS,COLUMNS), dtype=int)
-        self.board[:,0] = 9
-        self.board[:,COLUMNS-1] = 9
-        self.board[ROWS-1,:] = 9
-        
         
     def _getObs(self):
-        obs =  {"board": self.board.copy().flatten(), 
-                # "curr": self.curr_piece_type, 
-                # "rotation": self.rotation, 
-                # "pos": np.array([self.px, self.py]), 
-                # "hold": self.heldPiece,
-                # "preview": np.array(self.queue)
-                }
-        return obs
+        return self.board.copy().flatten()
 
     
     def _initializePieceQueue(self):
@@ -359,72 +345,62 @@ class TetrisEnv(gym.Env):
                 yield piece
         
     
-    def _clearLines(self):
+    def _clearLines(self, board):
         """
         Clears rows that are completed.
         Returns the number of lines cleared.
+
+        Side effect: modifies self.board
+
+        //this chatgpt code is cool
         """
+        rows, cols = board.shape
         
-        flag = np.all(self.board[:ROWS-1] != 0, axis=1)
-        rowsToClear = np.where(flag)[0]
-        clearCount = len(rowsToClear)
-        if np.any(flag):
-            bottom = np.max(rowsToClear)
-        else:
-            bottom = -1
-    
+        full_rows = np.all(board != 0, axis=1)
+        clearCount = np.sum(full_rows)
         if clearCount > 0:
-            self._pullBoardDown(clearCount, bottom)
+            board = board[~full_rows]
+            new_rows = np.zeros((clearCount, COLUMNS), dtype=np.int8)
+            board = np.vstack((new_rows, board))
         
-        
-        assert self.board.shape == (ROWS, COLUMNS)
+        assert board.shape == (ROWS, COLUMNS)
+
+        self.board = board
+
         return clearCount
-
-            
-    
-    # def _pullBoardDown(self, count, start):
-    #     clipped = self.board[:start-count+1].copy()
-    #     fullClip = clipped
-    #     for _ in range(count):
-    #         fullClip = np.vstack([NEW_LINE, fullClip])
-    #     self.board[start-count+1:start+1] = NEW_LINE
-    #     self.board[:start+1] = fullClip
-
-    def _pullBoardDown(self, count, start):
-        clipped = self.board[:start-count+1].copy()
-        # Create 'count' new rows (NEW_LINE) and stack them with the clipped array in one step
-        new_rows = np.tile(NEW_LINE, (count, 1))
-        fullClip = np.vstack([new_rows, clipped])
-        # Replace the corresponding part of the board with the new rows
-        self.board[:start+1] = fullClip
     
     
-    def _setGhostCoord(self):
-        self.ghostX = self.px
-        self.ghostY = self.py
-        while self._doesFit(self.curr_piece_type, self.rotation, self.ghostX, self.ghostY + 1):
-            self.ghostY += 1
+    def _setGhostCoord(self, board, piece, x, y, r):
+        """
+        Side effect: modifies self.ghostY
+        """
+        while self._doesFit(board, piece, r, x, y + 1):
+            y += 1
+        self.ghostY = y
         
         
     def horizontalMove(self, direction, instant=False):
+        """
+        Side effect: modifies self.px, self.previous_dir
+        """
         if instant:
-            while self._doesFit(self.curr_piece_type, self.rotation, self.px+direction, self.py):
+            while self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px+direction, self.py):
                 self.px += direction
                 self.previous_dir = direction
         else:
-            if self._doesFit(self.curr_piece_type, self.rotation, self.px + direction, self.py):
+            if self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px + direction, self.py):
                 self.px += direction
                 self.previous_dir = direction
     
     
-    def _wallKick(self, piece, attempted_rotation):
+    def _wallKick(self, board, piece, attempted_rotation):
         assert self.rotation >= 0 and self.rotation <= 3, 'Illegal rotation value. This should not happen'
         assert attempted_rotation >= 0 and attempted_rotation <= 3, 'Illegal rotation value. This should not happen'
 
         if(piece == 0): #I-mino
             translation_vectors = WALL_KICK_DATA_I[(self.rotation, attempted_rotation)]
             for vector in translation_vectors:
-                if(self._doesFit(piece, attempted_rotation, self.px + vector[0], self.py - vector[1])):
+                if(self._doesFit(board, piece, attempted_rotation, self.px + vector[0], self.py - vector[1])):
                     self.px += vector[0]
                     self.py -= vector[1]
                     self.rotation = attempted_rotation
@@ -433,31 +409,42 @@ class TetrisEnv(gym.Env):
         elif(piece in [1,2,4,5,6]):
             translation_vectors = WALL_KICK_DATA[(self.rotation, attempted_rotation)]
             for vector in translation_vectors:
-                if(self._doesFit(piece, attempted_rotation, self.px + vector[0], self.py - vector[1])):
+                if(self._doesFit(board, piece, attempted_rotation, self.px + vector[0], self.py - vector[1])):
                     self.px += vector[0]
                     self.py -= vector[1]
                     self.rotation = attempted_rotation
-                    break;
+                    break
                 
 
-    def _gravity_fall(self):
+    def _gravity_fall(self, board, piece, x, y, r):
+        """
+        Side effect: modifies self.py
+        """
         shouldLock = True
-        if self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py + 1):
-            self.py += 1
+        if self._doesFit(board, piece, r, x, y):
+            y += 1
             shouldLock = False
         
+        self.py = y
+
         return shouldLock
             
 
     
     def _hard_drop(self):
-        while self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py + 1):
+        """
+        Side effect: modifies self.py
+        """
+        while self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py + 1):
             self.py += 1
      
     
     def _softDrop(self):
+        """
+        Side effect: modifies self.py
+        """
         shouldLock = True
-        if self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py + 1):
+        if self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py + 1):
                 self.py += 1
                 shouldLock = False
             
@@ -465,15 +452,17 @@ class TetrisEnv(gym.Env):
 
     
     
-    def _lock_piece(self, piece_type, rotation, x, y):
+    def _lock_piece(self, board, piece_type, rotation, x, y):
         """
         Locks the piece on (x,y).
+
+        Side effect: modifies self.board
         """
         piece_array = self._rotate(piece_type, rotation)
         for px in range(piece_array.shape[1]):
             for py in range(piece_array.shape[0]):
                 if(piece_array[py,px] != 0):
-                    self.board[y+py][x+px] = piece_type + 1
+                    board[y+py][x+px] = piece_type + 1
         
 
     
@@ -482,6 +471,20 @@ class TetrisEnv(gym.Env):
         """
         Swaps the current piece with the held piece.
         Basically the same as spawn but does not modify the bag.
+
+
+        Side effect:
+            self.heldPiece
+            self.curr_piece_type
+            self.queue
+            self.px
+            self.py
+            self.rotation
+            self.drop_t
+            self.soft_t
+            self.lock_t
+            self.holdAllowed
+            self.gameOver
         """
         if self.heldPiece == 7:
             self.heldPiece = self.curr_piece_type
@@ -502,7 +505,7 @@ class TetrisEnv(gym.Env):
         
         self.holdAllowed = False
         
-        if not self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py):
+        if not self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py):
             self.gameOver = True
     
                             
@@ -525,8 +528,7 @@ class TetrisEnv(gym.Env):
         
         self.holdAllowed = True
     
-                
-        if not self._doesFit(self.curr_piece_type, self.rotation, self.px, self.py):
+        if not self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py):
             self.gameOver = True
 
         
@@ -536,25 +538,23 @@ class TetrisEnv(gym.Env):
         Given a type of piece, returns a 2D array representing the piece after rotation.
         """
         assert rotation >= 0 and rotation <= 3
-        # return np.rot90(TETROMINO[piece_type], k=rotation)
         return TETROMINO[piece_type][rotation]
     
 
-    def _doesFit(self, piece_type, rotation, x, y):
+    def _doesFit(self, board, piece_type, rotation, x, y):
         """
         Returns True if the piece with the given rotation fits into the board at coordinates (x,y).
         The coordinate of the piece is the top-left corner of the piece.
         """
         piece_array = self._rotate(piece_type, rotation)
-        for px in range(piece_array.shape[1]):
-            for py in range(piece_array.shape[0]):
-                if(px + x >= 0 and px + x < COLUMNS):
-                    if(py + y >= 0 and py + y < ROWS):
-                        if(piece_array[py,px] != 0 and self.board[y+py][x+px] != 0):
-                            return False
-                        
+        r, c = piece_array.shape
+        for py in range(r):
+            for px in range(c):
+                if(piece_array[py,px] != 0):
+                    if(x + px < 0 or x + px >= COLUMNS or y + py < 0 or y + py >= ROWS or board[y+py][x+px] != 0):
+                        return False
         return True
-    
+
 
     def _render_frame(self, mode):
         assert mode in self.metadata["render_modes"]
@@ -579,7 +579,7 @@ class TetrisEnv(gym.Env):
         #only if the render mode is 'human'.
         
         
-        self._render_board(self.canvas)
+        self._render_board(self.board, self.canvas)
         self._render_preview(self.canvas)
         self._render_hold(self.canvas)
         self._render_stats(self.canvas)
@@ -600,7 +600,7 @@ class TetrisEnv(gym.Env):
             return self._create_board_array()
         
     
-    def _render_board(self, canvas):
+    def _render_board(self, board, canvas):
         if self.board_surface is None:
             self.board_surface = pygame.Surface((BOARD_SURFACE_WIDTH, BOARD_SURFACE_HEIGHT))
             
@@ -608,59 +608,45 @@ class TetrisEnv(gym.Env):
          
         #Borders
         points = [(0,0),(BOARD_SURFACE_WIDTH-2,0),(BOARD_SURFACE_WIDTH-2,BOARD_SURFACE_HEIGHT-2),(0,BOARD_SURFACE_HEIGHT-2)]
-        pygame.draw.lines(self.board_surface, BORDER_GRAY, True, points, 2);
+        pygame.draw.lines(self.board_surface, BORDER_GRAY, True, points, 2)
 
-        for x in range(1, COLUMNS-1):
-            for y in range(2, ROWS-1):
-                if(self.board[y][x] != 0):
+        for x in range(0, COLUMNS):
+            for y in range(HIDDEN_ROWS, ROWS):
+                if(board[y][x] != 0):
                     tile = pygame.Surface((CELL_SIZE, CELL_SIZE))
-                    tile.fill(TETROMINO_COLORS[self.board[y][x]])
-                    self.board_surface.blit(tile, ((x-1)*CELL_SIZE, (y-2)*CELL_SIZE))
+                    tile.fill(TETROMINO_COLORS[board[y][x]])
+                    self.board_surface.blit(tile, (x*CELL_SIZE, (y-HIDDEN_ROWS)*CELL_SIZE))
               
         
-        self._render_ghost_piece(self.board_surface)            
-        self._render_curr_piece(self.board_surface)
-        
+        #self._render_ghost_piece(self.board_surface)            
+        self._render_piece(self.curr_piece_type, self.px, self.py, self.rotation, self.board_surface)
         
         canvas.blit(self.board_surface, (PADDING + HOLD_WIDTH, PADDING))
         
     
-    def _render_curr_piece(self, board):
+    def _render_piece(self, piece, x, y, rotation, board_surf):
         #if self.piece_surface is None:
-        piece_array = self._rotate(self.curr_piece_type, self.rotation)
+        piece_array = self._rotate(piece, rotation)
         piece_width, piece_height = piece_array.shape[1], piece_array.shape[0]
         piece_surface = pygame.Surface((piece_width * CELL_SIZE, piece_height * CELL_SIZE), pygame.SRCALPHA)
-        
         piece_surface.fill(0)
+        ghost_surface = piece_surface.copy()
+        ghost_surface.fill(0)
         
+
         for x in range(piece_width):
             for y in range(piece_height):
                 if(piece_array[y][x] != 0):
                     tile = pygame.Surface((CELL_SIZE, CELL_SIZE))
                     tile.fill(TETROMINO_COLORS[self.curr_piece_type+1])
                     piece_surface.blit(tile, (x * CELL_SIZE, y * CELL_SIZE))
-        
-        board.blit(piece_surface, ((self.px-1) * CELL_SIZE, (self.py-2) * CELL_SIZE))
-        
-    
-    def _render_ghost_piece(self, board):
-        ghost_array = self._rotate(self.curr_piece_type, self.rotation)
-        ghost_width, ghost_height = ghost_array.shape[1], ghost_array.shape[0]
-        ghost_surface = pygame.Surface((ghost_width * CELL_SIZE, ghost_height * CELL_SIZE), pygame.SRCALPHA)
-        ghost_surface.fill(0)
-        
-        for x in range(ghost_width):
-            for y in range(ghost_height):
-                if(ghost_array[y][x] != 0):
-                    tile = pygame.Surface((CELL_SIZE, CELL_SIZE))
-                    color = TETROMINO_COLORS[self.curr_piece_type+1]
-                    tile.fill(color)
-                    ghost_surface.blit(tile, (x*CELL_SIZE,y*CELL_SIZE))
+                    ghost_surface.blit(tile, (x * CELL_SIZE, y * CELL_SIZE))
 
         ghost_surface.set_alpha(128)
-        board.blit(ghost_surface, ((self.ghostX-1) * CELL_SIZE, (self.ghostY-2) * CELL_SIZE))
-                
         
+        board_surf.blit(ghost_surface, (self.px * CELL_SIZE, (self.ghostY-HIDDEN_ROWS) * CELL_SIZE))
+        board_surf.blit(piece_surface, (self.px * CELL_SIZE, (self.py-HIDDEN_ROWS) * CELL_SIZE))
+                
             
     def _render_preview(self, canvas):
         if self.preview_surface is None:

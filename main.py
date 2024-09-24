@@ -146,7 +146,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     if args.train:
-        from stable_baselines3 import A2C
+        from stable_baselines3 import PPO
         from stable_baselines3.common.env_util import make_vec_env
         from stable_baselines3.common.vec_env import SubprocVecEnv
         from stable_baselines3.common.env_checker import check_env
@@ -154,14 +154,13 @@ if __name__ == '__main__':
 
         
         check_env(tetris_env.TetrisEnv())
-        vec_env = make_vec_env(tetris_env.TetrisEnv, n_envs=10, vec_env_cls=SubprocVecEnv)
+        vec_env = make_vec_env(tetris_env.TetrisEnv, n_envs=10)
         callback = StopTrainingOnRewardThreshold(reward_threshold=1600, verbose=1)
         eval_callback = EvalCallback(vec_env, callback_on_new_best=callback, verbose=1)
         
-        model = A2C("MultiInputPolicy", vec_env, verbose=1, device="cpu",
-                    gae_lambda=0.96, gamma=0.98)
+        model = PPO("MlpPolicy", vec_env, verbose=1, device="cpu")
         model.learn(total_timesteps=3000000, progress_bar=True, callback=eval_callback)
-        model.save("a2c")
+        model.save("ppo")
         
             
     else:
@@ -203,9 +202,9 @@ if __name__ == '__main__':
             match args.agent:
                 case "random":
                     agent = RandomAgent()
-                case "a2c":
-                    from stable_baselines3 import A2C
-                    agent = A2C.load("a2c")
+                case "ppo":
+                    from stable_baselines3 import PPO
+                    agent = PPO.load("ppo")
                 case "KD":
                     from agent import KeepDropAgent
                     agent = KeepDropAgent()

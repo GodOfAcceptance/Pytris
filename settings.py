@@ -1,4 +1,5 @@
-import pygame
+import pygame.font
+import pygame.mixer
 import numpy as np
 pygame.font.init()
 pygame.mixer.init()
@@ -7,17 +8,21 @@ pygame.mixer.init()
 
 ## SCREEN
 #Board layout
-COLUMNS = 12 # 10 cols + 2 walls
-ROWS = 23 # 20 rows + 2 hidden + 1 wall
+# COLUMNS = 12 # 10 cols + 2 walls
+# ROWS = 23 # 20 rows + 2 hidden + 1 wall
+# CELL_SIZE = 30
+COLUMNS = 10
+HIDDEN_ROWS = 2
+ROWS = 20 + HIDDEN_ROWS
 CELL_SIZE = 30
 
-BOARD_SURFACE_WIDTH = (COLUMNS-2)*CELL_SIZE
-BOARD_SURFACE_HEIGHT = (ROWS-3)*CELL_SIZE
+BOARD_SURFACE_WIDTH = COLUMNS * CELL_SIZE
+BOARD_SURFACE_HEIGHT = (ROWS - HIDDEN_ROWS)*CELL_SIZE
 
 #Preview layout
 NUM_PREVIEW = 5
 PREVIEW_WIDTH = 6 * CELL_SIZE
-PREVIEW_HEIGHT = (5*3+1) * CELL_SIZE
+PREVIEW_HEIGHT = (NUM_PREVIEW*3+1) * CELL_SIZE
 
 #Info layout
 STAT_WIDTH = BOARD_SURFACE_WIDTH
@@ -48,7 +53,7 @@ FORCE_LOCK_DELAY = 500
 # DAS = 6
 # ARR = 0 #if 0, then teleport
 
-SPAWN_X = (COLUMNS-2) // 2 - 1
+SPAWN_X = COLUMNS // 2 - 1
 SPAWN_Y = 0
 
 NEW_LINE = np.zeros((COLUMNS,), dtype=int)
