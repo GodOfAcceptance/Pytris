@@ -21,8 +21,6 @@ class TetrisEnv(gym.Env):
     
     Action space: Box(0, 2, shape=(7,) dtype=int)
     [left, right, rotate left, rotate right, soft drop, hard drop, hold]
-    Action space: Box(0, 2, shape=(7,) dtype=int)
-    [left, right, rotate left, rotate right, soft drop, hard drop, hold]
     
     Observation space: a flattened 1D array of the board.
                 
@@ -83,17 +81,10 @@ class TetrisEnv(gym.Env):
         self.heldPiece = 7 #none
         
         
-        ## Features setup
-        self.gravityOn = True
-        self.softDropOn = False
-        self.startLocking = False
-        
-        self.previous_dir = 0
-        self.lock_t = 0
-        self.drop_t = DROP_INTERVAL
-        self.soft_t = SOFT_DROP_INTERVAL
-        self.force_lock_t = 0
-        
+        ## DAS related
+        self.dasDirection = 0
+        self.dasCount = 0
+
         
         ## reward related stuff
         self.numRotations = 0
@@ -113,12 +104,8 @@ class TetrisEnv(gym.Env):
         """
         input = [left, right, rot left, rot right, soft drop, hard drop, hold]
         """
-        x = self.ctrl.update(input)
+        self.ctrl.update(input)
         obs, reward, terminated, truncated, info = (None, 0, False, False, None)
-
-        if(self.ctrl.justReleasedLeftOrRight([0,0,0],[1,0,0])):
-            print("hi")
-        self.px += x
 
         if self.render_mode == "human":
             self.render()
@@ -143,73 +130,32 @@ class TetrisEnv(gym.Env):
 
     
     ##################   HELPER FUNCTIONS   ######################
-    def cont_to_bin(self, contAction):
-        return np.round(contAction).astype(int)
-    
-    
-    def _bumpiness(self, board):
-        total = 0
-        for col in range(1, COLUMNS-2):
-            total += abs(self._columnHeight(board, col) - self._columnHeight(board, col+1))
-            
-        return total
-    
-    def _aggregateHeight(self, board):
-        total = 0
-        for col in range(1, COLUMNS-1):
-            height = self._columnHeight(board, col)
-            total += height
-            
-        return total
-    
+    def getXDirection(self):
+        """
+        Left: -1
+        Right: 1
+        Nothing: 0
+        """
+        if self.ctrl.keyHeld[0] and self.ctrl.keyHeld[1]: #pressing both L R
+            if self.ctrl.keyHeldFrames[0] > self.ctrl.keyHeldFrames[1]:
+                return 1
+            else:
+                return -1
+        elif self.ctrl.keyHeld[0]:
+            return -1
+        elif self.ctrl.keyHeld[1]:
+            return 1
+        else:
+            return 0
         
-    def _nHoles(self, board):
-        """
-        Returns the number of holes in the board.
-        A hole is defined as an empty cell with at least one filled cell above it.
-        """
-        rows, cols = board.shape
-        holes = 0
 
-        for col in range(cols):
-            filled = False
-            for row in range(rows):
-                if board[row][col] != 0:
-                    filled = True
-                elif filled:
-                    # There's a filled cell above and this cell is empty, so it's a hole.
-                    holes += 1
-        return holes
-    
-    
-    def _nPits(self, board):
-        """
-        Returns the number of pits in the board.
-        A pit is defined as an empty column of height >= 2, surrounded by filled columns on the sides.
-        """
-        #Get the colum height of left and right. Then, check if the middle column is a pit.
-        count = 0
-        for col in range(1, COLUMNS-1):
-            left = self._columnHeight(board, col-1)
-            right = self._columnHeight(board, col+1)
-            middle = self._columnHeight(board, col)
-            if middle >= 2 and left >= middle and right >= middle:
-                count += 1
-                
-        return count
-    
-
-    def _columnHeight(self, board, col):
-        """
-        Returns the height of the column.
-        Requires: 0 <= col < COLUMNS.
-        
-        col = 0 and col = COLUMNS-1 always return ROWS-1.
-        """
-        for row in range(ROWS-1):
-            if board[row][col] != 0:
-                return ROWS-1 - row #don't include the bottom wall.
-        return 0
+    def padRepeat(self):
+        moveDir = self.getXDirection()
+        if moveDir != 0:
+            self.dasCount += 1
+        else:
+            self.dasCount = 0
+        self.dasDirection = moveDir
                     
         
     def _getObs(self):
@@ -242,8 +188,6 @@ class TetrisEnv(gym.Env):
 
         //this chatgpt code is cool
         """
-        rows, cols = board.shape
-        
         full_rows = np.all(board != 0, axis=1)
         clearCount = np.sum(full_rows)
         if clearCount > 0:
@@ -267,119 +211,45 @@ class TetrisEnv(gym.Env):
         self.ghostY = y
         
         
-    def horizontalMove(self, direction, instant=False):
-        """
-        Side effect: modifies self.px, self.previous_dir
-        """
-        if instant:
-            while self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px+direction, self.py):
-                self.px += direction
-                self.previous_dir = direction
-        else:
-            if self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px + direction, self.py):
-                self.px += direction
-                self.previous_dir = direction
-    
+    def horizontalMove(self, direction):
+        pass
+
     
     def _wallKick(self, board, piece, x, y, r1, r2):
-        assert r1 >= 0 and r1 <= 3, 'Illegal rotation value. This should not happen'
-        assert r2 >= 0 and r2 <= 3, 'Illegal rotation value. This should not happen'
-
-        if(piece == 0): #I-mino
-            translation_vectors = WALL_KICK_DATA_I[(r1, r2)]
-            for vector in translation_vectors:
-                if(self._doesFit(board, piece, r2, x + vector[0], y - vector[1])):
-                    x += vector[0]
-                    y -= vector[1]
-                    r1 = r2
-                    break
-        
-        elif(piece in [1,2,4,5,6]):
-            translation_vectors = WALL_KICK_DATA[(r1, r2)]
-            for vector in translation_vectors:
-                if(self._doesFit(board, piece, r1, x + vector[0], y - vector[1])):
-                    x += vector[0]
-                    y -= vector[1]
-                    r1 = r2
-                    break
-        
-        self.px = x
-        self.py = y
-        self.rotation = r1
+        pass
                 
 
     def _gravity_fall(self, board, piece, x, y, r):
-        """
-        Side effect: modifies self.py
-        """
-        shouldLock = True
-        if self._doesFit(board, piece, r, x, y):
-            y += 1
-            shouldLock = False
-        
-        self.py = y
-
-        return shouldLock
+        pass
             
 
-    
-    def _hard_drop(self):
-        """
-        Side effect: modifies self.py
-        """
-        while self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py + 1):
-            self.py += 1
+    def _hard_drop(self, board, piece, x, y, r):
+        pass
      
     
-    def _softDrop(self):
-        """
-        Side effect: modifies self.py
-        """
-        shouldLock = True
-        if self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py + 1):
-                self.py += 1
-                shouldLock = False
-            
-        return shouldLock
+    def _softDrop(self, board, piece, x, y, r):
+        pass
 
     
-    
-    def _lock_piece(self, board, piece_type, rotation, x, y):
+    def _lock_piece(self, board, piece, x, y, r):
         """
         Locks the piece on (x,y).
 
         Side effect: modifies self.board
         """
-        piece_array = self._rotate(piece_type, rotation)
+        piece_array = self._pieceArrayOf(piece, r)
         for px in range(piece_array.shape[1]):
             for py in range(piece_array.shape[0]):
                 if(piece_array[py,px] != 0):
-                    board[y+py][x+px] = piece_type + 1
+                    board[y+py][x+px] = piece + 1
 
-        
-
-    
 
     def _swap(self):
         """
         Swaps the current piece with the held piece.
         Basically the same as spawn but does not modify the bag.
-
-
-        Side effect:
-            self.heldPiece
-            self.curr_piece_type
-            self.queue
-            self.px
-            self.py
-            self.rotation
-            self.drop_t
-            self.soft_t
-            self.lock_t
-            self.holdAllowed
-            self.gameOver
         """
-        if self.heldPiece == 7:
+        if self.heldPiece == 7: #empty
             self.heldPiece = self.curr_piece_type
             self.curr_piece_type = self.queue.popleft()
             self.queue.append(next(self.bag))
@@ -390,16 +260,8 @@ class TetrisEnv(gym.Env):
         
         self.px = SPAWN_X
         self.py = SPAWN_Y
-        self.rotation = 0
-        
-        self.drop_t = DROP_INTERVAL
-        self.soft_t = SOFT_DROP_INTERVAL
-        self.lock_t = 0.0
-        
-        self.holdAllowed = False
-        
-        if not self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py):
-            self.gameOver = True
+        self.rotation = 0    
+        self.holdAllowed = False #consecutive hold is not allowed
     
                             
     def _spawn(self):
@@ -411,14 +273,7 @@ class TetrisEnv(gym.Env):
         self.rotation = 0
         self.px = SPAWN_X
         self.py = SPAWN_Y
- 
-        self.drop_t = DROP_INTERVAL
-        self.soft_t = SOFT_DROP_INTERVAL
-        self.lock_t = 0
-        self.force_lock_t = 0
-        self.numRotations = 0
         self.queue.append(next(self.bag))
-        
         self.holdAllowed = True
     
         if not self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py):
@@ -426,7 +281,7 @@ class TetrisEnv(gym.Env):
 
         
         
-    def _rotate(self, piece_type, rotation):
+    def _pieceArrayOf(self, piece_type, rotation):
         """
         Given a type of piece, returns a 2D array representing the piece after rotation.
         """
@@ -439,7 +294,7 @@ class TetrisEnv(gym.Env):
         Returns True if the piece with the given rotation fits into the board at coordinates (x,y).
         The coordinate of the piece is the top-left corner of the piece.
         """
-        piece_array = self._rotate(piece_type, rotation)
+        piece_array = self._pieceArrayOf(piece_type, rotation)
         r, c = piece_array.shape
         for py in range(r):
             for px in range(c):
@@ -519,7 +374,7 @@ class TetrisEnv(gym.Env):
     
     def _render_piece(self, piece, x, y, rotation, board_surf):
         #if self.piece_surface is None:
-        piece_array = self._rotate(piece, rotation)
+        piece_array = self._pieceArrayOf(piece, rotation)
         piece_width, piece_height = piece_array.shape[1], piece_array.shape[0]
         piece_surface = pygame.Surface((piece_width * CELL_SIZE, piece_height * CELL_SIZE), pygame.SRCALPHA)
         piece_surface.fill(0)
