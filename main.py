@@ -159,7 +159,7 @@ if __name__ == '__main__':
         eval_callback = EvalCallback(vec_env, callback_on_new_best=callback, verbose=1)
         
         model = PPO("MlpPolicy", vec_env, verbose=1, device="cpu")
-        model.learn(total_timesteps=3000000, progress_bar=True, callback=eval_callback)
+        model.learn(total_timesteps=1000000, progress_bar=True, callback=eval_callback)
         model.save("ppo")
         
             

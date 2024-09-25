@@ -50,8 +50,8 @@ LOCK_DELAY = 60
 FORCE_LOCK_DELAY = 500
 
 
-# DAS = 6
-# ARR = 0 #if 0, then teleport
+DAS = 8
+ARR = 1 #if 0, then teleport
 
 SPAWN_X = COLUMNS // 2 - 1
 SPAWN_Y = 0

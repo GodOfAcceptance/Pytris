@@ -31,7 +31,7 @@ class TetrisEnv(gym.Env):
         -1: 40 lines mode
     
     """
-    def __init__(self, game_mode=0, render_mode=None, DAS=8, ARR=1, train_mode=False):
+    def __init__(self, game_mode=0, render_mode=None, DAS=DAS, ARR=ARR, train_mode=False):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         """
         If human-rendering is used, `self.screen` will be a reference
@@ -111,131 +111,19 @@ class TetrisEnv(gym.Env):
         
     def step(self, input):
         """
-        action = [left, right, rot left, rot right, soft drop, hard drop, hold]
+        input = [left, right, rot left, rot right, soft drop, hard drop, hold]
         """
-        reward = 0
-        clearCount = 0
-        truncated = self.totalSteps > 5000 and self.totalScore < 100
-        terminated = self.gameOver
-        locked = False
-        hold = False
-        info = {"locked": False, "hold": False} #used for vfx in human play mode.
-        
-        if self.gameOver:
-            return self._getObs(), 0, terminated, truncated, info
+        x = self.ctrl.update(input)
+        obs, reward, terminated, truncated, info = (None, 0, False, False, None)
 
-        self.timeElapsed = round(self.timeElapsed + 1.0 / self.metadata["render_fps"], 2)
-        now = int(pygame.time.get_ticks() / 1000.0 * self.metadata["render_fps"]) ##self.reset() calls pygame.init(), so assume it's safe
-        
-        self.ctrl.keyHeld = input if not self.isTraining else self.cont_to_bin(input)
-        self.ctrl.updateKeyHeldFrame()
-        action = self.ctrl.getAction()
-       
-        direction = action[0]
-        rotation = action[1]
-        drop = action[2]
-        hold = action[3]
-        
-        if hold and self.holdAllowed: #hold
-            self._swap()
-            hold = True
-            observation = self._getObs()
-            return observation, reward, terminated, truncated, info
-            
-            
-        if drop == 2: #Hard drop
-            self._hard_drop()
-            self._lock_piece(self.board, self.curr_piece_type, self.rotation, self.px, self.py)
-            clearCount = self._clearLines(self.board)
-            locked = True
+        if(self.ctrl.justReleasedLeftOrRight([0,0,0],[1,0,0])):
+            print("hi")
+        self.px += x
 
-        else:
-            if drop == 1:
-                self.gravityOn = False
-                self.softDropOn = True
-            elif drop == 0:
-                self.gravityOn = True
-                self.softDropOn = False
-            else:
-                #print("unreachable")
-                truncated = True
-                
-            if self.previous_dir != direction or direction == 0:
-                self.ctrl.resetDAS()
-                
-            if direction != 0:
-                self.lock_t = 0.0
-                if self.ctrl.das_t == 0:
-                    self.ctrl.das_t = now
-                    self.ctrl.arr_t = now
-                    self.horizontalMove(direction)
-                elif (now - self.ctrl.das_t >= self.ctrl.DAS) and (now - self.ctrl.arr_t >= self.ctrl.ARR):
-                    instant = self.ctrl.ARR == 0
-                    self.horizontalMove(direction, instant)
-                    self.ctrl.arr_t = now
-
-            if rotation != 0:
-                self.numRotations += 1
-                self.lock_t = 0.0
-                if self._doesFit(self.board, self.curr_piece_type, (self.rotation - rotation) % 4, self.px, self.py):
-                    self.rotation = (self.rotation - rotation) % 4
-                else:
-                    self._wallKick(self.board, self.curr_piece_type, (self.rotation - rotation) % 4)
-            
-            
-            if self.gravityOn:
-                self.soft_t = SOFT_DROP_INTERVAL
-                if self.drop_t >= DROP_INTERVAL:
-                    self._gravity_fall(self.board, self.curr_piece_type, self.px, self.py, self.rotation)
-                    self.drop_t = 0.0
-                else:
-                    self.drop_t += 1
-            
-            if self.softDropOn:
-                self.drop_t = 0.0
-                if self.soft_t >= SOFT_DROP_INTERVAL:
-                    self._softDrop()
-                    self.soft_t = 0.0
-                else:
-                    self.soft_t += 1
-            
-            self.startLocking = not self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py + 1)
-            if self.startLocking:
-                self.force_lock_t += 1
-                if self.lock_t >= LOCK_DELAY or self.force_lock_t >= FORCE_LOCK_DELAY:
-                    self._lock_piece(self.board, self.curr_piece_type, self.rotation, self.px, self.py)
-                    clearCount = self._clearLines(self.board)
-                    locked = True
-                else:
-                    self.lock_t += 1
-
-        self.totalScore += REWARD_MAP[clearCount] #this is for human display only.
-        self.linesCleared += clearCount
-        self.linesToClear -= clearCount
-        
-        ## start reward calculation
-        fitness = -self._nHoles(self.board) - self.previousFitness
-        self.previousFitness = fitness
-        reward = REWARD_MAP[clearCount] + (-0.5 * (self.numRotations > 2) * self.numRotations)
-        info = {"locked" : locked, "hold": hold}
-
-        # if drop == 2:
-        #     print(reward)
-
-        if locked:
-            self._spawn()  
-
-        self._setGhostCoord(self.board, self.curr_piece_type, self.px, self.py, self.rotation)
-        observation = self._getObs()
-
-        if(self.gameMode == 1 and self.linesCleared == 40):
-            self.gameOver = True
-
-        if self.render_mode == 'human':
+        if self.render_mode == "human":
             self.render()
-            
-        return observation, reward, terminated, truncated, info
 
+        return obs, reward, terminated, truncated, info
     
     
     def render(self):
@@ -393,27 +281,31 @@ class TetrisEnv(gym.Env):
                 self.previous_dir = direction
     
     
-    def _wallKick(self, board, piece, attempted_rotation):
-        assert self.rotation >= 0 and self.rotation <= 3, 'Illegal rotation value. This should not happen'
-        assert attempted_rotation >= 0 and attempted_rotation <= 3, 'Illegal rotation value. This should not happen'
+    def _wallKick(self, board, piece, x, y, r1, r2):
+        assert r1 >= 0 and r1 <= 3, 'Illegal rotation value. This should not happen'
+        assert r2 >= 0 and r2 <= 3, 'Illegal rotation value. This should not happen'
 
         if(piece == 0): #I-mino
-            translation_vectors = WALL_KICK_DATA_I[(self.rotation, attempted_rotation)]
+            translation_vectors = WALL_KICK_DATA_I[(r1, r2)]
             for vector in translation_vectors:
-                if(self._doesFit(board, piece, attempted_rotation, self.px + vector[0], self.py - vector[1])):
-                    self.px += vector[0]
-                    self.py -= vector[1]
-                    self.rotation = attempted_rotation
-                    break;
+                if(self._doesFit(board, piece, r2, x + vector[0], y - vector[1])):
+                    x += vector[0]
+                    y -= vector[1]
+                    r1 = r2
+                    break
         
         elif(piece in [1,2,4,5,6]):
-            translation_vectors = WALL_KICK_DATA[(self.rotation, attempted_rotation)]
+            translation_vectors = WALL_KICK_DATA[(r1, r2)]
             for vector in translation_vectors:
-                if(self._doesFit(board, piece, attempted_rotation, self.px + vector[0], self.py - vector[1])):
-                    self.px += vector[0]
-                    self.py -= vector[1]
-                    self.rotation = attempted_rotation
+                if(self._doesFit(board, piece, r1, x + vector[0], y - vector[1])):
+                    x += vector[0]
+                    y -= vector[1]
+                    r1 = r2
                     break
+        
+        self.px = x
+        self.py = y
+        self.rotation = r1
                 
 
     def _gravity_fall(self, board, piece, x, y, r):
@@ -463,6 +355,7 @@ class TetrisEnv(gym.Env):
             for py in range(piece_array.shape[0]):
                 if(piece_array[py,px] != 0):
                     board[y+py][x+px] = piece_type + 1
+
         
 
     
