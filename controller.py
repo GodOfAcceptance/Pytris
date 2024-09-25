@@ -14,18 +14,19 @@ class Controller:
 
     
     def update(self, input):
-        prevKeyHeld = self.keyHeld.copy()
+        prevKeyHeld = self.keyHeld
+        self.keyHeld = input.copy()
+        self.keyHeldFrames = np.where(self.keyHeld, self.keyHeldFrames + 1, 0)
 
-        self.keyHeld = input
-        self.keyHeldFrames = np.where(input, self.keyHeldFrames + 1, 0)
+        if self.justReleasedLeftOrRight(self.keyHeld, prevKeyHeld):
+            self.das = 0
+            self.arr = self.ARR
 
-        if self.justReleasedLeftOrRight(input, prevKeyHeld):
-            print("hi")
 
         if self.justPressedLeftOrRight():
             #reset das/arr
             self.das = 1
-            self.arr = 0
+            self.arr = self.ARR
             return self.getXDirection()
 
 
@@ -42,6 +43,7 @@ class Controller:
             self.das = 0
             self.arr = 0
 
+        print(self.das)
         return 0    
 
 
