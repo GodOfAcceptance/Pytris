@@ -4,6 +4,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from collections import deque
 from controller import Controller
+from controller import Key
 
 
 class TetrisEnv(gym.Env):
@@ -47,7 +48,7 @@ class TetrisEnv(gym.Env):
         self.preview = None
         
         self.gameMode = game_mode
-        self.ctrl = Controller(DAS, ARR)
+        self.ctrl = Controller()
         self.isTraining = train_mode
                 
         # self.action_space = spaces.MultiBinary(7)
@@ -81,9 +82,12 @@ class TetrisEnv(gym.Env):
         self.heldPiece = 7 #none
         
         
-        ## DAS related
+        ## movement related
+        self.dasRepeat = False
         self.dasDirection = 0
         self.dasCount = 0
+
+        self.lockDelay = 0
 
         
         ## reward related stuff
@@ -105,12 +109,17 @@ class TetrisEnv(gym.Env):
         input = [left, right, rot left, rot right, soft drop, hard drop, hold]
         """
         self.ctrl.update(input)
-        obs, reward, terminated, truncated, info = (None, 0, False, False, None)
+
+        self.dasRepeat = True
+        self.dasInstant = False
+        while(self.dasRepeat): #set to false inside move()
+            self.move()
+        
 
         if self.render_mode == "human":
             self.render()
 
-        return obs, reward, terminated, truncated, info
+        return (None, 0, False, False, None) #obs, reward, terminated, truncated, info
     
     
     def render(self):
@@ -130,6 +139,73 @@ class TetrisEnv(gym.Env):
 
     
     ##################   HELPER FUNCTIONS   ######################
+    def move(self):
+        
+        self.dasRepeat = False
+        moveDirection = self.getXDirection()
+
+        if self.dasDirection != moveDirection:
+            self.dasDirection = moveDirection
+            self.dasCount = 0
+
+        if not self.dasInstant:
+            #Hold
+            if self.ctrl.justPressedKey(Key.HOLD):
+                if(self.holdAllowed):
+                    self.holdAllowed = False
+                    self._swap()
+            
+
+            #rotation
+            rotated = False
+            rt = self.getRotateDirection()
+            if self._doesFit(self.board, self.curr_piece_type, self.px, self.py, (self.rotation + rt) % 4):
+                self.rotation = (self.rotation + rt) % 4
+                rotated = True 
+            else:
+                kick = self._wallKick(self.board, self.curr_piece_type, self.px, self.py, self.rotation, (self.rotation + rt) % 4)
+                if kick is not None:
+                    x2, y2, r2 = kick
+                    self.px += x2
+                    self.py += y2
+                    self.rotation = r2
+                    rotated = True
+            
+
+            if rotated:
+                self.lockDelay = 0
+
+            
+            #Game over check
+            if not self._doesFit(self.board, self.curr_piece_type, self.px, self.py, self.rotation):
+                if self.lockDelay == LOCK_DELAY:
+                    self._lock_piece(self.board, self.curr_piece_type, self.px, self.py, self.rotation)
+                    self._spawn()
+                else:
+                    self.lockDelay += 1
+            
+            move = 0
+            movedHorizontal = False
+            
+
+
+    def getRotateDirection(self):
+        """
+        Counter-clockwise: -1
+        Clockwise: 1
+        Nothing: 0
+        """
+        rt = 0
+        if self.ctrl.justPressedKey(Key.RLEFT) == 1:
+            rt = -1
+        elif self.ctrl.justPressedKey(Key.RRIGHT) == 1:
+            rt = 1
+        else:
+            rt = 0
+        
+        return rt
+
+
     def getXDirection(self):
         """
         Left: -1
@@ -149,15 +225,19 @@ class TetrisEnv(gym.Env):
             return 0
         
 
-    def padRepeat(self):
+    def processAutoRepeat(self):
         moveDir = self.getXDirection()
-        if moveDir != 0:
-            self.dasCount += 1
+        if moveDir == 0:
+            self.resetAutoRepeat()
         else:
-            self.dasCount = 0
-        self.dasDirection = moveDir
-                    
+            self.dasCount += 1
+        self.dasDirection = moveDir    
+
         
+    def resetAutoRepeat(self):
+        self.dasCount = 0   
+        
+
     def _getObs(self):
         return self.board.copy().flatten()
 
@@ -206,17 +286,29 @@ class TetrisEnv(gym.Env):
         """
         Side effect: modifies self.ghostY
         """
-        while self._doesFit(board, piece, r, x, y + 1):
+        while self._doesFit(board, piece, x, y + 1, r):
             y += 1
         self.ghostY = y
         
-        
-    def horizontalMove(self, direction):
-        pass
 
     
     def _wallKick(self, board, piece, x, y, r1, r2):
-        pass
+        if piece == 0: #I-mino
+            for v in WALL_KICK_DATA_I[(r1,r2)]:
+                x2 = v[0]
+                y2 = v[1]
+                if y2 >= 0:
+                    if self._doesFit(board, piece, x + x2, y + y2, r2):
+                        return (x2, y2, r2)
+        else:
+            for v in WALL_KICK_DATA[(r1,r2)]:
+                x2 = v[0]
+                y2 = v[1]
+                if y2 >= 0:
+                    if self._doesFit(board, piece, x + x2, y + y2, r2):
+                        return (x2, y2, r2)
+        
+        return None
                 
 
     def _gravity_fall(self, board, piece, x, y, r):
@@ -276,7 +368,7 @@ class TetrisEnv(gym.Env):
         self.queue.append(next(self.bag))
         self.holdAllowed = True
     
-        if not self._doesFit(self.board, self.curr_piece_type, self.rotation, self.px, self.py):
+        if not self._doesFit(self.board, self.curr_piece_type, self.px, self.py, self.rotation):
             self.gameOver = True
 
         
@@ -289,7 +381,7 @@ class TetrisEnv(gym.Env):
         return TETROMINO[piece_type][rotation]
     
 
-    def _doesFit(self, board, piece_type, rotation, x, y):
+    def _doesFit(self, board, piece_type, x, y, rotation):
         """
         Returns True if the piece with the given rotation fits into the board at coordinates (x,y).
         The coordinate of the piece is the top-left corner of the piece.
