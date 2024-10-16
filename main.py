@@ -146,18 +146,19 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     if args.train:
-        from stable_baselines3 import PPO
-        from stable_baselines3.common.env_util import make_vec_env
-        from stable_baselines3.common.vec_env import SubprocVecEnv
-        from gymnasium.wrappers import TimeLimit
+        # from stable_baselines3 import PPO
+        # from stable_baselines3.common.env_util import make_vec_env
+        # from stable_baselines3.common.vec_env import SubprocVecEnv
+        # from gymnasium.wrappers import TimeLimit
         
         
 
-        vec_env = make_vec_env(tetris_env.TetrisEnv, wrapper_class=TimeLimit, wrapper_kwargs={"max_episode_steps":30000}, n_envs=16)
+        # vec_env = make_vec_env(tetris_env.TetrisEnv, wrapper_class=TimeLimit, wrapper_kwargs={"max_episode_steps":30000}, n_envs=16)
         
-        model = PPO("MultiInputPolicy", vec_env, verbose=1)
-        model.learn(total_timesteps=1, progress_bar=True)
-        model.save("ppo")
+        # model = PPO("MultiInputPolicy", vec_env, verbose=1)
+        # model.learn(total_timesteps=1, progress_bar=True)
+        # model.save("ppo")
+        pass
         
             
     else:

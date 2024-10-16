@@ -618,7 +618,7 @@ class TetrisEnv(gym.Env):
                     self.board_surface.blit(tile, ((x-1)*CELL_SIZE, (y-2)*CELL_SIZE))
               
         
-        self._render_ghost_piece(self.board_surface)            
+        #self._render_ghost_piece(self.board_surface)            
         self._render_curr_piece(self.board_surface)
         
         
@@ -632,6 +632,8 @@ class TetrisEnv(gym.Env):
         piece_surface = pygame.Surface((piece_width * CELL_SIZE, piece_height * CELL_SIZE), pygame.SRCALPHA)
         
         piece_surface.fill(0)
+        ghost_surface = piece_surface.copy()
+        ghost_surface.set_alpha(128)
         
         for x in range(piece_width):
             for y in range(piece_height):
@@ -639,27 +641,10 @@ class TetrisEnv(gym.Env):
                     tile = pygame.Surface((CELL_SIZE, CELL_SIZE))
                     tile.fill(TETROMINO_COLORS[self.curr_piece_type+1])
                     piece_surface.blit(tile, (x * CELL_SIZE, y * CELL_SIZE))
+                    ghost_surface.blit(tile, (x * CELL_SIZE, y * CELL_SIZE))
         
         board.blit(piece_surface, ((self.px-1) * CELL_SIZE, (self.py-2) * CELL_SIZE))
-        
-    
-    def _render_ghost_piece(self, board):
-        ghost_array = self._rotate(self.curr_piece_type, self.rotation)
-        ghost_width, ghost_height = ghost_array.shape[1], ghost_array.shape[0]
-        ghost_surface = pygame.Surface((ghost_width * CELL_SIZE, ghost_height * CELL_SIZE), pygame.SRCALPHA)
-        ghost_surface.fill(0)
-        
-        for x in range(ghost_width):
-            for y in range(ghost_height):
-                if(ghost_array[y][x] != 0):
-                    tile = pygame.Surface((CELL_SIZE, CELL_SIZE))
-                    color = TETROMINO_COLORS[self.curr_piece_type+1]
-                    tile.fill(color)
-                    ghost_surface.blit(tile, (x*CELL_SIZE,y*CELL_SIZE))
-
-        ghost_surface.set_alpha(128)
         board.blit(ghost_surface, ((self.ghostX-1) * CELL_SIZE, (self.ghostY-2) * CELL_SIZE))
-                
         
             
     def _render_preview(self, canvas):
