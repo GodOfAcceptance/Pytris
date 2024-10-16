@@ -151,7 +151,7 @@ class TetrisEnv(gym.Env):
         if drop == 2: #Hard drop
             self._hard_drop()
             self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
-            clearCount = self._clearLines()
+            clearCount = self._clearLines(self.board)
             locked = True
 
         else:
@@ -209,7 +209,7 @@ class TetrisEnv(gym.Env):
                 self.force_lock_t += 1
                 if self.lock_t >= LOCK_DELAY or self.force_lock_t >= FORCE_LOCK_DELAY:
                     self._lock_piece(self.curr_piece_type, self.rotation, self.px, self.py)
-                    clearCount = self._clearLines()
+                    clearCount = self._clearLines(self.board)
                     locked = True
                 else:
                     self.lock_t += 1
@@ -222,8 +222,8 @@ class TetrisEnv(gym.Env):
         reward = REWARD_MAP[clearCount] + (-1 * (self.numRotations > 2) * self.numRotations)
         info = {"locked" : locked, "hold": hold}
 
-        if drop == 2:
-            print(reward)
+        # if drop == 2:
+        #     print(reward)
 
         if locked:
             self._spawn()   
@@ -357,47 +357,26 @@ class TetrisEnv(gym.Env):
             np.random.shuffle(pieces)
             for piece in pieces:
                 yield piece
-        
+
     
-    def _clearLines(self):
-        """
-        Clears rows that are completed.
-        Returns the number of lines cleared.
-        """
-        
-        flag = np.all(self.board[:ROWS-1] != 0, axis=1)
-        rowsToClear = np.where(flag)[0]
-        clearCount = len(rowsToClear)
-        if np.any(flag):
-            bottom = np.max(rowsToClear)
-        else:
-            bottom = -1
-    
+    def _clearLines(self, board):
+        full_rows = np.all(board[:-1] != 0, axis=1) # full_rows[i] = True if full else False, for all 0 <= i < ROWS-1
+        clearCount = np.sum(full_rows)
         if clearCount > 0:
-            self._pullBoardDown(clearCount, bottom)
+            board = np.vstack((
+                np.zeros((clearCount, COLUMNS), dtype=int),
+                board[:-1][~full_rows],
+                board[-1:]
+            ))
         
-        
-        assert self.board.shape == (ROWS, COLUMNS)
+        board[:clearCount, [0, COLUMNS-1]] = 9 #set up the vertical walls again
+
+        assert board.shape == (ROWS, COLUMNS)
+
+        self.board = board
+
         return clearCount
-
-            
-    
-    # def _pullBoardDown(self, count, start):
-    #     clipped = self.board[:start-count+1].copy()
-    #     fullClip = clipped
-    #     for _ in range(count):
-    #         fullClip = np.vstack([NEW_LINE, fullClip])
-    #     self.board[start-count+1:start+1] = NEW_LINE
-    #     self.board[:start+1] = fullClip
-
-    def _pullBoardDown(self, count, start):
-        clipped = self.board[:start-count+1].copy()
-        # Create 'count' new rows (NEW_LINE) and stack them with the clipped array in one step
-        new_rows = np.tile(NEW_LINE, (count, 1))
-        fullClip = np.vstack([new_rows, clipped])
-        # Replace the corresponding part of the board with the new rows
-        self.board[:start+1] = fullClip
-    
+ 
     
     def _setGhostCoord(self):
         self.ghostX = self.px
